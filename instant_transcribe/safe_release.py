@@ -1,10 +1,10 @@
-from core.models import ParaformerV1Transcriber
+from core.transcriber import Transcriber
 
 
 class SafeRelease:
     """安全的模型释放包装。多次调用永不抛异常。"""
 
-    def __init__(self, model: ParaformerV1Transcriber | None):
+    def __init__(self, model: Transcriber | None):
         self._model = model
 
     def try_release(self) -> bool:

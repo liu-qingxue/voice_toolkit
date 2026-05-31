@@ -1,19 +1,17 @@
 from pathlib import Path
 from datetime import date
 from core.transcriber import Transcriber
-from core.models import ParaformerV2Transcriber
-from core.audio import load_wav
+from core.model_factory import create_transcriber
 from core.config import CONFIG
 
 
-_DIARY_MODEL: ParaformerV2Transcriber | None = None
+_DIARY_MODEL: Transcriber | None = None
 
 
-def _get_model() -> ParaformerV2Transcriber:
+def _get_model() -> Transcriber:
     global _DIARY_MODEL
     if _DIARY_MODEL is None:
-        _DIARY_MODEL = ParaformerV2Transcriber()
-        _DIARY_MODEL.load()
+        _DIARY_MODEL = create_transcriber("v2")
     return _DIARY_MODEL
 
 
@@ -44,11 +42,7 @@ class DiaryTranscriber:
         return result
 
     def _transcribe_file(self, wav_path: Path) -> str:
-        audio, sr = load_wav(str(wav_path))
-        if len(audio) == 0:
-            return ""
-        text = self._engine.transcribe(audio, sr)
-        return text.strip()
+        return self._engine.transcribe_file(wav_path)
 
     def set_engine(self, engine: Transcriber):
         self._engine = engine
