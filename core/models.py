@@ -92,7 +92,7 @@ class ParaformerV1Transcriber(Transcriber):
     def _extract(result) -> str:
         if isinstance(result, list):
             texts = [r.get("text", "") for r in result if isinstance(r, dict)]
-            return "".join(texts).strip()
+            return "\n".join(t for t in texts if t).strip()
         if isinstance(result, dict):
             return result.get("text", "").strip()
         return str(result).strip()
@@ -182,7 +182,7 @@ class ParaformerV2Transcriber(Transcriber):
     def _extract(result) -> str:
         if isinstance(result, list):
             texts = [r.get("text", "") for r in result if isinstance(r, dict)]
-            return "".join(texts).strip()
+            return "\n".join(t for t in texts if t).strip()
         if isinstance(result, dict):
             return result.get("text", "").strip()
         return str(result).strip()
