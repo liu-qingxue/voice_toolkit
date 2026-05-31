@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""批量转录 — 终端交互版"""
+"""批量转录 — 菜单交互版"""
 
 import subprocess
 import sys
@@ -12,29 +12,85 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core.model_factory import create_transcriber
 
 AUDIO_EXTENSIONS = {".wav", ".m4a"}
-BANNER_WIDTH = 60
+MODEL_LABELS = {
+    "v1": "V1 (SeACo-Paraformer, 热词增强)",
+    "v2": "V2 (Paraformer VAD+Punc, 标点恢复)",
+}
 
 
-def input_choice(prompt: str, accepted: set[str], error_msg: str) -> str:
+class State:
+    def __init__(self):
+        self.model_type = "v2"
+        self.audio_dir: Path | None = None
+        self.all_scanned: list[Path] = []
+        self.selected_ids: set[int] = set()
+        self.output_dir: Path | None = None
+
+
+def clear():
+    print("\033[2J\033[H", end="")
+
+
+def divider(char: str = "=", width: int = 56):
+    print(char * width)
+
+
+def selected_files(state: State) -> list[Path]:
+    return [state.all_scanned[i] for i in sorted(state.selected_ids)]
+
+
+def input_yn(prompt: str) -> bool:
+    c = input(prompt).strip().lower()
+    return c in ("", "y", "yes")
+
+
+# ============================================================
+# 二级面板
+# ============================================================
+
+def panel_model(state: State):
+    clear()
+    print("--- 选择模型 ---\n")
+    for key, label in MODEL_LABELS.items():
+        mark = " ←" if key == state.model_type else ""
+        num = "1" if key == "v1" else "2"
+        print(f"  [{num}] {label}{mark}")
+    print()
     while True:
-        c = input(prompt).strip()
-        if c in accepted:
-            return c
-        print(f"  {error_msg}")
+        c = input("> ").strip()
+        if c == "1":
+            state.model_type = "v1"
+            return
+        if c == "2":
+            state.model_type = "v2"
+            return
+        print("  请输入 1 或 2")
 
 
-def input_dir(label: str) -> Path:
-    while True:
-        p = Path(input(f"\n{label} > ").strip()).expanduser()
-        if p.is_dir():
-            return p.resolve()
-        print(f"  路径不存在或不是目录: {p}")
+def panel_audio(state: State):
+    clear()
+    print("--- 选择音频 ---")
+    if state.audio_dir:
+        print(f"  当前目录: {state.audio_dir}")
+    print()
 
+    p = input("输入音频目录 (回车保持) > ").strip()
+    if p:
+        path = Path(p).expanduser()
+        if not path.is_dir():
+            print(f"\n  路径不存在或不是目录: {path}")
+            input("按回车返回...")
+            return
+        state.audio_dir = path.resolve()
+        state.all_scanned = scan_audio(state.audio_dir)
+        state.selected_ids.clear()
 
-def input_output_dir(label: str) -> Path:
-    p = Path(input(f"\n{label} > ").strip()).expanduser()
-    p.mkdir(parents=True, exist_ok=True)
-    return p.resolve()
+    if state.audio_dir is None:
+        print("  尚未设置音频目录")
+        input("按回车返回...")
+        return
+
+    _select_files(state)
 
 
 def scan_audio(audio_dir: Path) -> list[Path]:
@@ -44,21 +100,133 @@ def scan_audio(audio_dir: Path) -> list[Path]:
     return sorted(files)
 
 
-def confirm(audio_dir: Path, total: int, output_dir: Path, model_label: str) -> bool:
-    print("\n" + "=" * BANNER_WIDTH)
-    print(f"  模型: {model_label}")
-    print(f"  音频: {audio_dir}  ({total} 个文件)")
-    print(f"  输出: {output_dir}")
-    print("=" * BANNER_WIDTH)
+def _select_files(state: State):
+    files = state.all_scanned
     while True:
-        c = input("\n确认开始? [Y/n] > ").strip().lower()
-        if c in ("", "y", "yes"):
-            return True
-        if c in ("n", "no"):
-            return False
+        clear()
+        wav = sum(1 for f in files if f.suffix.lower() == ".wav")
+        m4a = sum(1 for f in files if f.suffix.lower() == ".m4a")
+        print("--- 选择文件 ---")
+        print(f"  扫描: .wav: {wav}, .m4a: {m4a}, 共 {len(files)} 个")
+        print()
+
+        n_digits = len(str(len(files)))
+        for i, f in enumerate(files):
+            mark = "✓" if i in state.selected_ids else " "
+            print(f"  [{mark}] {i + 1:>{n_digits}}. {f.name}")
+
+        print("\n  数字=切换 | A=全选 | D=全不选 | Enter=确认")
+        c = input("> ").strip().lower()
+
+        if c == "":
+            return
+        elif c == "a":
+            state.selected_ids = set(range(len(files)))
+        elif c == "d":
+            state.selected_ids.clear()
+        else:
+            try:
+                idx = int(c) - 1
+                if 0 <= idx < len(files):
+                    if idx in state.selected_ids:
+                        state.selected_ids.discard(idx)
+                    else:
+                        state.selected_ids.add(idx)
+            except ValueError:
+                pass
 
 
-def decode_m4a(path: Path) -> tuple[np.ndarray, int]:
+def panel_output(state: State):
+    clear()
+    print("--- 输出目录 ---")
+    if state.output_dir:
+        print(f"  当前: {state.output_dir}")
+    print()
+
+    p = input("输入输出目录 (回车保持) > ").strip()
+    if p:
+        path = Path(p).expanduser()
+        path.mkdir(parents=True, exist_ok=True)
+        state.output_dir = path.resolve()
+
+
+def panel_transcribe(state: State):
+    files = selected_files(state)
+
+    if not files or state.output_dir is None:
+        clear()
+        print("--- 开始转录 ---\n")
+        if not files:
+            print("  请先在 [2] 选择音频文件。")
+        if state.output_dir is None:
+            print("  请先在 [3] 设置输出目录。")
+        input("\n按回车返回...")
+        return
+
+    clear()
+    divider()
+    print(f"  确认开始转录")
+    divider()
+    print(f"  模型: {MODEL_LABELS[state.model_type]}")
+    print(f"  文件: {len(files)} 个")
+    print(f"  输出: {state.output_dir}")
+    divider()
+
+    if not input_yn("\n确认开始? [Y/n] > "):
+        return
+
+    # — 执行 —
+    clear()
+    print("加载模型中...")
+    transcriber = create_transcriber(state.model_type)
+    print("模型已就绪。\n")
+    divider()
+
+    total = len(files)
+    n_digits = len(str(total))
+    ok = 0
+    fail = 0
+
+    for i, audio_file in enumerate(files, 1):
+        prefix = f"[{i:>{n_digits}}/{total}] {audio_file.name}"
+        try:
+            out_path = _resolve_output(state.output_dir, audio_file)
+            if audio_file.suffix.lower() == ".wav":
+                text = transcriber.transcribe_file(audio_file)
+            elif audio_file.suffix.lower() == ".m4a":
+                audio_np, sr = _decode_m4a(audio_file)
+                text = transcriber.transcribe(audio_np, sr)
+            else:
+                raise RuntimeError(f"不支持的格式: {audio_file.suffix}")
+
+            out_path.write_text(text, encoding="utf-8")
+            ok += 1
+            print(f"{prefix} ... ✓")
+        except Exception as e:
+            fail += 1
+            print(f"{prefix} ... ✗ {str(e)}")
+
+    print()
+    divider()
+    report = f"  完成: {ok}/{total} 成功"
+    if fail:
+        report += f" | {fail} 失败"
+    print(report)
+    print(f"  输出: {state.output_dir}")
+    divider()
+
+
+def _resolve_output(output_dir: Path, audio_file: Path) -> Path:
+    base = output_dir / audio_file.name
+    out = base.with_suffix(".txt")
+    i = 1
+    while out.exists():
+        out = output_dir / f"{base.stem}_{i}.txt"
+        i += 1
+    return out
+
+
+def _decode_m4a(path: Path) -> tuple[np.ndarray, int]:
     proc = subprocess.run(
         [
             "ffmpeg", "-i", str(path),
@@ -79,126 +247,60 @@ def decode_m4a(path: Path) -> tuple[np.ndarray, int]:
     return pcm.astype(np.float32) / 32768.0, 16000
 
 
-def process_one(audio_file: Path, output_dir: Path, transcriber) -> tuple[str, str | None]:
-    out_path = output_dir / audio_file.with_suffix(".txt").name
+# ============================================================
+# 一级面板
+# ============================================================
 
-    if out_path.exists():
-        return "skipped", None
+def print_status(state: State):
+    divider()
+    print("  批量转录")
+    divider()
 
-    ext = audio_file.suffix.lower()
+    label = MODEL_LABELS[state.model_type]
+    print(f"  模型: {label}")
 
-    if ext == ".wav":
-        try:
-            text = transcriber.transcribe_file(audio_file)
-        except Exception as e:
-            return "failed", str(e)
-
-    elif ext == ".m4a":
-        try:
-            audio_np, sr = decode_m4a(audio_file)
-            text = transcriber.transcribe(audio_np, sr)
-        except Exception as e:
-            return "failed", str(e)
-
+    if state.audio_dir:
+        n_selected = len(state.selected_ids)
+        n_total = len(state.all_scanned)
+        print(f"  音频: {state.audio_dir}  ({n_total} 个文件, 已选 {n_selected})")
     else:
-        return "failed", f"不支持的格式: {ext}"
+        print("  音频: (未设置)")
 
-    try:
-        out_path.write_text(text, encoding="utf-8")
-    except Exception as e:
-        return "failed", f"保存失败: {e}"
+    if state.output_dir:
+        print(f"  输出: {state.output_dir}")
+    else:
+        print("  输出: (未设置)")
 
-    return "success", None
+    divider("─")
+    print("  [1] 选择模型")
+    print("  [2] 选择音频")
+    print("  [3] 选择输出目录")
+    print("  [4] 开始转录")
+    print("  [0] 退出")
+    divider("─")
 
 
 def main():
-    print("\n" + "=" * BANNER_WIDTH)
-    print("  批量转录")
-    print("=" * BANNER_WIDTH)
+    state = State()
 
-    # — 选模型 —
-    print("\n模型选择:")
-    print("  [1] V1 - SeACo-Paraformer (热词增强)")
-    print("  [2] V2 - Paraformer VAD+Punc (标点恢复, 抗噪)")
-    model_type = input_choice("\n> ", {"1", "2"}, "请输入 1 或 2")
-    model_type = "v1" if model_type == "1" else "v2"
+    while True:
+        clear()
+        print_status(state)
+        c = input("\n> ").strip()
 
-    MODEL_LABELS = {
-        "v1": "V1 (SeACo-Paraformer, 热词增强)",
-        "v2": "V2 (Paraformer VAD+Punc, 标点恢复)",
-    }
-    model_label = MODEL_LABELS[model_type]
-
-    # — 输路径 —
-    audio_dir = input_dir("音频目录")
-    output_dir = input_output_dir("输出目录")
-
-    # — 扫描 —
-    files = scan_audio(audio_dir)
-    if not files:
-        print(f"\n  未找到音频文件 ({', '.join(sorted(AUDIO_EXTENSIONS))})")
-        return
-
-    wav_count = sum(1 for f in files if f.suffix.lower() == ".wav")
-    m4a_count = sum(1 for f in files if f.suffix.lower() == ".m4a")
-    parts = []
-    if wav_count:
-        parts.append(f".wav: {wav_count}")
-    if m4a_count:
-        parts.append(f".m4a: {m4a_count}")
-    print(f"\n  扫描到 {len(files)} 个文件 ({', '.join(parts)})")
-
-    # — 确认 —
-    if not confirm(audio_dir, len(files), output_dir, model_label):
-        print("  已取消。")
-        return
-
-    # — 加载模型 —
-    print("\n加载模型中...")
-    transcriber = create_transcriber(model_type)
-    print("模型已就绪。\n")
-    print("=" * BANNER_WIDTH)
-
-    # — 处理 —
-    total = len(files)
-    n_digits = len(str(total))
-    results = {"success": 0, "failed": 0, "skipped": 0}
-    errors: list[str] = []
-
-    for i, audio_file in enumerate(files, 1):
-        status, error_msg = process_one(audio_file, output_dir, transcriber)
-
-        prefix = f"[{i:>{n_digits}}/{total}] {audio_file.name}"
-        if status == "success":
-            results["success"] += 1
-            print(f"{prefix} ... ✓")
-        elif status == "skipped":
-            results["skipped"] += 1
-            print(f"{prefix} ... 跳过 (输出已存在)")
-        else:
-            results["failed"] += 1
-            print(f"{prefix} ... ✗ {error_msg}")
-            errors.append(f"{audio_file.name}: {error_msg}")
-
-    # — 错误日志 —
-    error_log_path = output_dir / "_errors.log"
-    if errors:
-        error_log_path.write_text("\n".join(errors), encoding="utf-8")
-    elif error_log_path.exists():
-        error_log_path.unlink()
-
-    # — 报告 —
-    print("\n" + "=" * BANNER_WIDTH)
-    report = [f"完成: {results['success']}/{total} 成功"]
-    if results["failed"]:
-        report.append(f"       {results['failed']} 失败")
-    if results["skipped"]:
-        report.append(f"       {results['skipped']} 跳过")
-    report.append(f"输出: {output_dir}")
-    if errors:
-        report.append(f"错误日志: {error_log_path}")
-    print("\n".join(f"  {line}" for line in report))
-    print("=" * BANNER_WIDTH)
+        if c == "1":
+            panel_model(state)
+        elif c == "2":
+            panel_audio(state)
+        elif c == "3":
+            panel_output(state)
+        elif c == "4":
+            panel_transcribe(state)
+            return
+        elif c == "0":
+            clear()
+            print("  已退出。")
+            return
 
 
 if __name__ == "__main__":

@@ -129,6 +129,8 @@ class ParaformerV2Transcriber(Transcriber):
             vad_model="iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
             vad_model_revision="v2.0.4",
             vad_kwargs={"max_single_segment_time": 30000},
+            punc_model="iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
+            punc_model_revision="v2.0.4",
         )
         if model_dir:
             kwargs["model_dir"] = model_dir
