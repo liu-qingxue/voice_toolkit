@@ -1,3 +1,4 @@
+import os
 import smtplib
 from email.message import EmailMessage
 from core.config import CONFIG
@@ -9,8 +10,8 @@ class Notifier:
         self.enabled = cfg.get("enabled", False)
         self.host = cfg.get("smtp_host", "")
         self.port = cfg.get("smtp_port", 587)
-        self.user = cfg.get("smtp_user", "")
-        self.passwd = cfg.get("smtp_pass", "")
+        self.user = os.environ.get("SMTP_USER", "")
+        self.passwd = os.environ.get("SMTP_PASS", "")
         self.to = cfg.get("to", "")
 
     def send(self, subject: str, body: str):

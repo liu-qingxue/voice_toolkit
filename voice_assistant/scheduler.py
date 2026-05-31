@@ -1,4 +1,3 @@
-import time
 import subprocess
 from pathlib import Path
 from datetime import date, datetime, timedelta
@@ -61,14 +60,3 @@ class DiaryScheduler:
             return bool(ssid)
         except Exception:
             return False
-
-    def run_forever(self, interval_sec: int = 60):
-        last_run_date = None
-        while True:
-            now = datetime.now()
-            if (now.hour == CONFIG["fetch_time_hour"]
-                    and now.minute == CONFIG["fetch_time_minute"]
-                    and last_run_date != now.date()):
-                self.run_once()
-                last_run_date = now.date()
-            time.sleep(interval_sec)

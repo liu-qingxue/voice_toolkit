@@ -27,8 +27,10 @@ class ParaformerV1Transcriber(Transcriber):
         if self._model is not None:
             return
         from funasr import AutoModel
+        model_id = CONFIG.get("model", {}).get("live") or self.MODEL_ID
+        model_dir = self.model_dir or CONFIG.get("model", {}).get("dir")
         kwargs = dict(
-            model=self.MODEL_ID,
+            model=model_id,
             model_revision="v2.0.4",
             ncpu=self.ncpu,
             device="cpu",
@@ -40,8 +42,8 @@ class ParaformerV1Transcriber(Transcriber):
             punc_model="iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
             punc_model_revision="v2.0.4",
         )
-        if self.model_dir:
-            kwargs["model_dir"] = self.model_dir
+        if model_dir:
+            kwargs["model_dir"] = model_dir
         self._model = AutoModel(**kwargs)
 
     def transcribe(self, audio: np.ndarray, sample_rate: int = 16000) -> str:
@@ -115,8 +117,10 @@ class ParaformerV2Transcriber(Transcriber):
         if self._model is not None:
             return
         from funasr import AutoModel
+        model_id = CONFIG.get("model", {}).get("diary") or self.MODEL_ID
+        model_dir = self.model_dir or CONFIG.get("model", {}).get("dir")
         kwargs = dict(
-            model=self.MODEL_ID,
+            model=model_id,
             model_revision="v2.0.4",
             ncpu=self.ncpu,
             device="cpu",
@@ -126,8 +130,8 @@ class ParaformerV2Transcriber(Transcriber):
             vad_model_revision="v2.0.4",
             vad_kwargs={"max_single_segment_time": 30000},
         )
-        if self.model_dir:
-            kwargs["model_dir"] = self.model_dir
+        if model_dir:
+            kwargs["model_dir"] = model_dir
         self._model = AutoModel(**kwargs)
 
     def transcribe(self, audio: np.ndarray, sample_rate: int = 16000) -> str:

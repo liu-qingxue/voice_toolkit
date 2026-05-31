@@ -34,8 +34,6 @@ CONFIG = {
         "enabled": False,
         "smtp_host": "",
         "smtp_port": 587,
-        "smtp_user": "",
-        "smtp_pass": "",
         "to": "",
     },
     "model": {
