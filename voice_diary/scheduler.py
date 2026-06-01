@@ -20,6 +20,7 @@ class DiaryScheduler:
         self.notifier = Notifier()
 
     def run_once(self):
+        result = subprocess.run(["connect_to_hotspot.sh"], capture_output=True)
         today = date.today()
         yesterday = today - timedelta(days=1)
 
