@@ -4,12 +4,11 @@ channels: 1                 # 声道数
 dtype: int16                # 采样位深
 segment_seconds: 600        # 分片秒数。手机端写死与此对齐
 # ─── 电脑端调度 ──────────────────────────
-pc:
-  data_dir: ~/.voice_diary   # 电脑端数据存储根目录
-  hotspot_ssid_prefix: voice_diary  # 手机热点 SSID 前缀（WiFi 检测用）
-  fetch_time_hour: 0         # 拉取小时
-  fetch_time_minute: 5       # 拉取分钟
-  retention_days: 7          # 保留天数
+data_dir: ~/.voice_diary   # 电脑端数据存储根目录
+hotspot_ssid_prefix: voice_diary  # 手机热点 SSID 前缀（WiFi 检测用）
+fetch_time_hour: 0         # 拉取小时
+fetch_time_minute: 5       # 拉取分钟
+retention_days: 7          # 保留天数
 # ─── 邮件告警 ────────────────────────────
 mail:
   enabled: false
