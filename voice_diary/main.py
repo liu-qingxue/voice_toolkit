@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from voice_assistant.scheduler import DiaryScheduler
+from voice_diary.scheduler import DiaryScheduler
 
 def main():
     sched = DiaryScheduler()

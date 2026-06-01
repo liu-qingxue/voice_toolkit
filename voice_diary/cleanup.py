@@ -2,7 +2,7 @@ import shutil
 from pathlib import Path
 from datetime import date, timedelta
 from core.config import CONFIG
-from voice_assistant.meta_db import MetaDB
+from voice_diary.meta_db import MetaDB
 
 
 class CleanupManager:
