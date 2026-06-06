@@ -4,9 +4,19 @@ import os
 import numpy as np
 from core.config import CONFIG
 from core.transcriber import Transcriber
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+os.environ.setdefault("MODELSCOPE_DISABLE_NETWORK", "1")
+
+MODELSCOPE_CACHE_ROOT = Path.home() / ".cache/modelscope/hub"
+
+
+def _local_path(model_id: str) -> str:
+    """将 ModelScope 模型 ID 转换为本地缓存绝对路径"""
+    parts = model_id.split("/", 1)
+    return str(MODELSCOPE_CACHE_ROOT / "models" / parts[0] / parts[1])
 
 class ParaformerV1Transcriber(Transcriber):
     """SeACo-Paraformer — 实时转录用。
@@ -29,17 +39,30 @@ class ParaformerV1Transcriber(Transcriber):
         from funasr import AutoModel
         model_id = CONFIG.get("model", {}).get("live") or self.MODEL_ID
         model_dir = self.model_dir or CONFIG.get("model", {}).get("dir")
+
+        if not model_dir:
+            model_dir = str(Path.home() / ".cache/modelscope/hub")
+
+        model_path = _local_path(model_id)
+        vad_path = _local_path("iic/speech_fsmn_vad_zh-cn-16k-common-pytorch")
+        punc_path = _local_path("iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch")
+
+        for name, path in [("主模型", model_path), ("VAD", vad_path), ("标点", punc_path)]:
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"本地{name}模型路径不存在: {path}")
+
         kwargs = dict(
-            model=model_id,
+            model=model_path,
             model_revision="v2.0.4",
             ncpu=self.ncpu,
             device="cpu",
             disable_pbar=True,
             disable_update=True,
-            vad_model="iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
+            cache_dir=model_dir,
+            vad_model=vad_path,
             vad_model_revision="v2.0.4",
             vad_kwargs={"max_single_segment_time": 30000},
-            punc_model="iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
+            punc_model=punc_path,
             punc_model_revision="v2.0.4",
         )
         if model_dir:
@@ -119,17 +142,30 @@ class ParaformerV2Transcriber(Transcriber):
         from funasr import AutoModel
         model_id = CONFIG.get("model", {}).get("diary") or self.MODEL_ID
         model_dir = self.model_dir or CONFIG.get("model", {}).get("dir")
+
+        if not model_dir:
+            model_dir = str(Path.home() / ".cache/modelscope/hub")
+
+        model_path = _local_path(model_id)
+        vad_path = _local_path("iic/speech_fsmn_vad_zh-cn-16k-common-pytorch")
+        punc_path = _local_path("iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch")
+
+        for name, path in [("主模型", model_path), ("VAD", vad_path), ("标点", punc_path)]:
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"本地{name}模型路径不存在: {path}")
+
         kwargs = dict(
-            model=model_id,
+            model=model_path,
             model_revision="v2.0.4",
             ncpu=self.ncpu,
             device="cpu",
             disable_pbar=True,
             disable_update=True,
-            vad_model="iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
+            cache_dir=model_dir,
+            vad_model=vad_path,
             vad_model_revision="v2.0.4",
             vad_kwargs={"max_single_segment_time": 30000},
-            punc_model="iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
+            punc_model=punc_path,
             punc_model_revision="v2.0.4",
         )
         if model_dir:

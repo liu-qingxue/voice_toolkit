@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
+        android:name=".VoiceDiaryApp"
         android:allowBackup="true"
         android:label="语音日记"
         android:supportsRtl="true"
