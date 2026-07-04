@@ -3,20 +3,6 @@ sample_rate: 16000          # 录音采样率（Hz）
 channels: 1                 # 声道数
 dtype: int16                # 采样位深
 segment_seconds: 600        # 分片秒数。手机端写死与此对齐
-# ─── 电脑端调度 ──────────────────────────
-data_dir: ~/.voice_diary   # 电脑端数据存储根目录
-hotspot_ssid_prefix: voice_diary  # 手机热点 SSID 前缀（WiFi 检测用）
-fetch_time_hour: 0         # 拉取小时
-fetch_time_minute: 5       # 拉取分钟
-retention_days: 7          # 保留天数
-# ─── 邮件告警 ────────────────────────────
-mail:
-  enabled: false
-  smtp_host: smtp.qq.com
-  smtp_port: 587
-  smtp_user: your@qq.com
-  smtp_pass: your_token
-  to: your@qq.com
 # ─── 模型 ────────────────────────────────
 model:
   dir:                      # 模型缓存目录（默认 ~/.cache/modelscope/hub）

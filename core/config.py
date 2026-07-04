@@ -5,9 +5,6 @@ try:
 except ImportError:
     yaml = None
 
-ROOT = Path.home() / ".voice_diary"
-
-
 def _deep_merge(base: dict, overrides: dict):
     for k, v in overrides.items():
         if k in base and isinstance(base[k], dict) and isinstance(v, dict):
@@ -21,21 +18,6 @@ CONFIG = {
     "channels": 1,
     "dtype": "int16",
     "segment_seconds": 600,
-    "pc_data_dir": ROOT,
-    "raw_dir": ROOT / "raw",
-    "transcripts_dir": ROOT / "transcripts",
-    "core_dir": ROOT / "core",
-    "meta_db": ROOT / "meta.db",
-    "hotspot_ssid_prefix": "voice_diary",
-    "fetch_time_hour": 0,
-    "fetch_time_minute": 5,
-    "retention_days": 7,
-    "mail": {
-        "enabled": False,
-        "smtp_host": "",
-        "smtp_port": 587,
-        "to": "",
-    },
     "model": {
         "dir": None,
         "live": "iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
@@ -75,23 +57,6 @@ def reload():
         "channels": 1,
         "dtype": "int16",
         "segment_seconds": 600,
-        "pc_data_dir": ROOT,
-        "raw_dir": ROOT / "raw",
-        "transcripts_dir": ROOT / "transcripts",
-        "core_dir": ROOT / "core",
-        "meta_db": ROOT / "meta.db",
-        "hotspot_ssid_prefix": "voice_diary",
-        "fetch_time_hour": 0,
-        "fetch_time_minute": 5,
-        "retention_days": 7,
-        "mail": {
-            "enabled": False,
-            "smtp_host": "",
-            "smtp_port": 587,
-            "smtp_user": "",
-            "smtp_pass": "",
-            "to": "",
-        },
         "model": {
             "dir": None,
             "live": "iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
