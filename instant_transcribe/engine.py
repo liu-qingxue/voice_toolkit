@@ -15,7 +15,7 @@ class LiveEngine:
             self._engine = transcriber
         else:
             # 默认使用 V1 用于实时场景，除非指定其他
-            self._engine = create_transcriber(model_type or "v1")
+            self._engine = create_transcriber(model_type)
 
     @property
     def is_loaded(self) -> bool:

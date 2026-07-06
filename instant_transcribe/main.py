@@ -1,3 +1,4 @@
+import fcntl
 import json
 import os
 import signal
@@ -6,13 +7,13 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from core.config import CONFIG
+from ..core.config import CONFIG  
 
+ROOT = Path(__file__).resolve().parent.parent # 总项目目录
 LOCK = Path(CONFIG["live"]["lock_file"])
-RESULT = Path(CONFIG["live"]["result_file"])
 STATUS = Path(str(LOCK) + "_status")
-ROOT = Path(__file__).resolve().parent.parent
+
+RESULT = Path(CONFIG["live"]["result_file"])
 
 
 def _start_daemon() -> bool:
@@ -56,9 +57,19 @@ def _start_daemon() -> bool:
 
 def toggle():
     if not LOCK.exists():
-        if not _start_daemon():
-            sys.exit(1)
-        time.sleep(0.5)
+        lock_fd = open("/tmp/live_transcriber_daemon.lock", "w")
+        try:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except IOError:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            if not LOCK.exists():
+                if not _start_daemon():
+                    sys.exit(1)
+                time.sleep(0.5)
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
 
     is_recording = False
     try:
