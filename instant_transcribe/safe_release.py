@@ -1,4 +1,4 @@
-from core.transcriber import Transcriber
+from core.transcribe_base import Transcriber
 
 
 class SafeRelease:

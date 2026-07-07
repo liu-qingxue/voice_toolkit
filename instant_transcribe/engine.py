@@ -1,4 +1,4 @@
-from core.transcriber import Transcriber
+from core.transcribe_base import Transcriber
 from core.model_factory import create_transcriber, get_default_transcriber
 
 

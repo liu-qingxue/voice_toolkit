@@ -4,7 +4,7 @@
 """
 
 from typing import Literal
-from core.transcriber import Transcriber
+from core.transcribe_base import Transcriber
 from core.models import ParaformerV1Transcriber, ParaformerV2Transcriber
 
 

@@ -3,7 +3,7 @@ import tempfile
 import os
 import numpy as np
 from core.config import CONFIG
-from core.transcriber import Transcriber
+from core.transcribe_base import Transcriber
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
