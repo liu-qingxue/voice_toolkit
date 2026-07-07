@@ -28,5 +28,6 @@ class Transcriber(ABC):
 
 
 class MockTranscriber(Transcriber):
+    """模拟转录,用于验证外层代码的正确"""
     def transcribe(self, audio: np.ndarray, sample_rate: int) -> str:
         return "这是一段测试转录文本 ABC 123 !@#"

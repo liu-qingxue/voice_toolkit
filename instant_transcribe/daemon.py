@@ -7,13 +7,6 @@ import logging
 from pathlib import Path
 import traceback
 
-_DEBUG_LOG = Path("/tmp/live_transcriber_debug.log")
-
-def _debug(msg: str):
-    """写入调试日志到 /tmp/live_transcriber_debug.log"""
-    with _DEBUG_LOG.open("a") as f:
-        f.write(f"[{os.getpid()}] {msg}\n")
-
 from PyQt6.QtCore import QObject, QProcess, Qt, QTimer
 from PyQt6.QtGui import QClipboard, QGuiApplication, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
@@ -23,6 +16,11 @@ from ..instant_transcribe.engine import LiveEngine
 from ..instant_transcribe.recorder import LiveRecorder
 from ..instant_transcribe.safe_release import SafeRelease
 
+_DEBUG_LOG = Path("/tmp/live_transcriber_debug.log")
+def _debug(msg: str):
+    """写入调试日志到 /tmp/live_transcriber_debug.log"""
+    with _DEBUG_LOG.open("a") as f:
+        f.write(f"[{os.getpid()}] {msg}\n")
 logger = logging.getLogger(__name__)
 
 ROOT=Path(__file__).resolve().parent.parent
@@ -41,11 +39,10 @@ class Daemon(QObject):
         super().__init__()
         
         _debug("__init__ 开始")
-        # 创建全局状态锁，保护所有共享状态的并发访问
+        # 创建全局状态锁,保护所有共享状态的并发访问
         self._state_lock = threading.RLock()
 
-        # 清除上一次残留状态（异常退出留下的 STATUS）
-        STATUS.unlink(missing_ok=True)
+        STATUS.unlink(missing_ok=True)   # 清除上一次残留状态（异常退出留下的 STATUS)
         _DEBUG_LOG.unlink(missing_ok=True)  # 每次启动清空历史日志
 
         if LOCK.exists():
@@ -55,21 +52,21 @@ class Daemon(QObject):
                 print("已有实例在运行", file=sys.stderr)
                 return
             except ValueError:
-                _debug("LOCK 内容不是合法 PID，清理")
+                _debug("LOCK 内容不是合法 PID,清理")
                 LOCK.unlink(missing_ok=True)
             except ProcessLookupError:
-                _debug("LOCK 存在但进程已死，清理")
+                _debug("LOCK 存在但进程已死,清理")
                 LOCK.unlink(missing_ok=True)
             except PermissionError:
-                _debug(f"无法检查旧进程 {old_pid}，权限不足")
-                print("权限不足，无法确认旧实例状态", file=sys.stderr)
+                _debug(f"无法检查旧进程 {old_pid},权限不足")
+                print("权限不足,无法确认旧实例状态", file=sys.stderr)
                 return
             except OSError as e:
                 _debug(f"其他系统错误: {e}")
                 LOCK.unlink(missing_ok=True)
 
-        # 必须在信号处理器注册和写 LOCK 之前初始化所有实例属性，
-        # 否则信号处理器可能在 __init__ 中途执行，访问不存在的属性导致 AttributeError 杀死进程
+        # 必须在信号处理器注册和写 LOCK 之前初始化所有实例属性,
+        # 否则信号处理器可能在 __init__ 中途执行,访问不存在的属性导致 AttributeError 杀死进程
         self._recorder: LiveRecorder | None = None
         self._rec_thread: threading.Thread | None = None
         self._recording = False
@@ -77,14 +74,14 @@ class Daemon(QObject):
         self._queue: list[str] = []
         _debug("实例属性已初始化")
 
-        # 注册信号处理器（必须在写 LOCK 之前，防止窗口期间收到信号被默认行为杀死）
+        # 注册信号处理器（必须在写 LOCK 之前,防止窗口期间收到信号被默认行为杀死）
         signal.signal(signal.SIGUSR1, lambda s, f: _debug("SIGUSR1 入队") or self._queue.append("usr1"))
         signal.signal(signal.SIGUSR2, lambda s, f: _debug("SIGUSR2 入队") or self._queue.append("usr2"))
         signal.signal(signal.SIGTERM, lambda s, f: _debug("SIGTERM 入队") or self._queue.append("quit"))
         
         _debug("信号处理器已注册")
 
-        # 尽早写 LOCK，让 main.py 能快速确认 daemon 已启动，防止并发启动
+        # 尽早写 LOCK,让 main.py 能快速确认 daemon 已启动,防止并发启动
         LOCK.write_text(str(os.getpid()))
         _debug(f"LOCK 已写入 (pid={os.getpid()})")
 
@@ -168,7 +165,7 @@ class Daemon(QObject):
             state: "idle", "recording", "transcribing"
         
         Returns:
-            成功为True，否则为False
+            成功为True,否则为False
         """
         with self._state_lock:
             try:
@@ -185,7 +182,7 @@ class Daemon(QObject):
                     logger.warning(f"Unknown state: {state}")
                     return False
                 
-                # 同时更新文件，确保内存和文件状态一致
+                # 同时更新文件,确保内存和文件状态一致
                 STATUS.write_text(state)
                 logger.debug(f"State changed to {state}")
                 return True
@@ -236,8 +233,8 @@ class Daemon(QObject):
             recording = self._recording
         
         if transcribing:
-            _debug("_toggle_recording: 正在转录中，忽略")
-            self._tray.showMessage("my_instant_transcribe", "正在转录，请稍候",
+            _debug("_toggle_recording: 正在转录中,忽略")
+            self._tray.showMessage("my_instant_transcribe", "正在转录,请稍候",
                                    QSystemTrayIcon.MessageIcon.Information, 3000)
             return
 
@@ -271,7 +268,7 @@ class Daemon(QObject):
         else:
             # 停止录音
             _debug("_toggle_recording: 停止录音")
-            self._tray.showMessage("my_instant_transcribe", "录音结束，即将转录",
+            self._tray.showMessage("my_instant_transcribe", "录音结束,即将转录",
                                    QSystemTrayIcon.MessageIcon.Information, 2000)
             
             # 安全地停止录音
@@ -301,7 +298,7 @@ class Daemon(QObject):
             logger.error(f"Recorder thread error: {e}", exc_info=True)
         finally:
             try:
-                # 如果录音线程异常退出，通知主线程
+                # 如果录音线程异常退出,通知主线程
                 setattr(self._recorder, '_normal_exit', False)
             except Exception:
                 pass
@@ -335,7 +332,7 @@ class Daemon(QObject):
 
     def _restart_helper(self, _exit_code=None):
         if self._helper_tries >= 3:
-            self._tray.showMessage("my_instant_transcribe", "快捷键注册失败，请重启应用",
+            self._tray.showMessage("my_instant_transcribe", "快捷键注册失败,请重启应用",
                                    QSystemTrayIcon.MessageIcon.Critical, 5000)
             return
         self._helper_tries += 1
@@ -346,7 +343,7 @@ class Daemon(QObject):
     def _transcribe_and_output(self, audio):
         _debug(f"_transcribe_and_output 开始, audio={type(audio).__name__} len={len(audio) if audio is not None else 0}")
         if audio is None or len(audio) == 0:
-            _debug("_transcribe_and_output: 音频为空，直接返回")
+            _debug("_transcribe_and_output: 音频为空,直接返回")
             print("[daemon] 音频为空", file=sys.stderr, flush=True)
             self._set_state("idle")
             self._stamp_menu()
@@ -354,13 +351,13 @@ class Daemon(QObject):
         
         # 原子化地设置为转录状态
         if not self._set_state("transcribing"):
-            _debug("_transcribe_and_output: 设为 transcribing 状态失败，返回")
+            _debug("_transcribe_and_output: 设为 transcribing 状态失败,返回")
             self._set_state("idle")
             self._stamp_menu()
             return
         
         self._stamp_menu()
-        self._tray.showMessage("my_instant_transcribe", "转录中，请稍候...",
+        self._tray.showMessage("my_instant_transcribe", "转录中,请稍候...",
                                QSystemTrayIcon.MessageIcon.Information, 3000)
         try:
             _debug("_transcribe_and_output: 开始 engine.transcribe() ...")
@@ -403,7 +400,7 @@ class Daemon(QObject):
         # 最后原子化地恢复到idle状态
         self._set_state("idle")
         self._stamp_menu()
-        _debug("_transcribe_and_output: 完成，回到 idle")
+        _debug("_transcribe_and_output: 完成,回到 idle")
 
     # ── 模型管理 ──────────────────────────
 
@@ -473,7 +470,7 @@ class Daemon(QObject):
         
         if transcribing:
             reply = QMessageBox.question(
-                None, "确认退出", "正在转录中，退出将中断转录。确定退出？",
+                None, "确认退出", "正在转录中,退出将中断转录。确定退出？",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No)
             if reply != QMessageBox.StandardButton.Yes:

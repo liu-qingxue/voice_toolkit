@@ -87,7 +87,6 @@ def reload():
     
     return True
 
-def reload():
     """
     重新加载配置（热加载）
     用于配置更新时重新读取文件
