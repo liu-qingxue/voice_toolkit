@@ -1,7 +1,6 @@
 /.model_test
 .vscode
 __pycache__
-config.yaml
 build/
 venv
 /.directory
