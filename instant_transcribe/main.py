@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from ..core.config import CONFIG  
+from ..config.config import CONFIG  
 
 ROOT = Path(__file__).resolve().parent.parent # 总项目目录
 LOCK = Path(CONFIG["live"]["lock_file"])

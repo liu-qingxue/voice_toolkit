@@ -1,10 +1,10 @@
-from core.transcribe_base import Transcriber
+from core.transcribe_base import TranscribeBase
 
 
 class SafeRelease:
     """安全的模型释放包装。多次调用永不抛异常。"""
 
-    def __init__(self, model: Transcriber | None):
+    def __init__(self, model: TranscribeBase | None):
         self._model = model
 
     def try_release(self) -> bool:

@@ -3,7 +3,7 @@ import sys
 import time as time_module
 import numpy as np
 import sounddevice as sd
-from core.config import CONFIG
+from config.config import CONFIG
 
 
 class LiveRecorder:

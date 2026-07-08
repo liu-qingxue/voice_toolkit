@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 
 
-class Transcriber(ABC):
+class TranscribeBase(ABC):
     @abstractmethod
     def transcribe(self, audio: np.ndarray, sample_rate: int) -> str:
         ...
@@ -27,7 +27,7 @@ class Transcriber(ABC):
         pass
 
 
-class MockTranscriber(Transcriber):
+class MockTranscriber(TranscribeBase):
     """模拟转录,用于验证外层代码的正确"""
     def transcribe(self, audio: np.ndarray, sample_rate: int) -> str:
         return "这是一段测试转录文本 ABC 123 !@#"

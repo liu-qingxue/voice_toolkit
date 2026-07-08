@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QApplication, QHBoxLayout, QPushButton, QTextEdit,
     QVBoxLayout, QWidget,
 )
-from core.config import CONFIG
+from config.config import CONFIG
 
 
 _live = CONFIG.get("live", {})

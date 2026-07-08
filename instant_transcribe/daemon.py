@@ -11,7 +11,7 @@ from PyQt6.QtCore import QObject, QProcess, Qt, QTimer
 from PyQt6.QtGui import QClipboard, QGuiApplication, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
-from ..core.config import CONFIG
+from ..config.config import CONFIG
 from ..instant_transcribe.engine import LiveEngine
 from ..instant_transcribe.recorder import LiveRecorder
 from ..instant_transcribe.safe_release import SafeRelease
@@ -87,7 +87,7 @@ class Daemon(QObject):
 
         _debug("开始加载模型 ...")
         try:
-            self._engine = LiveEngine()
+            self._engine = LiveEngine(model_type="v1")
             _debug("模型加载完成")
         except Exception as e:
             _debug(f"引擎加载失败: {e}")

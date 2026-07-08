@@ -2,7 +2,7 @@ import wave
 from pathlib import Path
 
 import numpy as np
-from core.config import CONFIG
+from config.config import CONFIG
 
 SAMPLE_RATE = CONFIG["sample_rate"]
 

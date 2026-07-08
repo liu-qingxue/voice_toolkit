@@ -2,8 +2,8 @@ import logging
 import tempfile
 import os
 import numpy as np
-from core.config import CONFIG
-from core.transcribe_base import Transcriber
+from config.config import CONFIG
+from core.transcribe_base import TranscribeBase
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ def _local_path(model_id: str) -> str:
     parts = model_id.split("/", 1)
     return str(MODELSCOPE_CACHE_ROOT / "models" / parts[0] / parts[1])
 
-class ParaformerV1Transcriber(Transcriber):
+class ParaformerV1Transcriber(TranscribeBase):
     """SeACo-Paraformer — 实时转录用。
     最优配置: ncpu=2, 纯净 CER=7.68%, RTF=0.187x
     """
@@ -121,7 +121,7 @@ class ParaformerV1Transcriber(Transcriber):
         return str(result).strip()
 
 
-class ParaformerV2Transcriber(Transcriber):
+class ParaformerV2Transcriber(TranscribeBase):
     """Paraformer VAD+Punc — 日志转录用。
     最优配置: ncpu=2, 降质 CER=18.35% (全场最低), RTF=0.140x
     """

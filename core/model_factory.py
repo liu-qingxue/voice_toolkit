@@ -4,14 +4,14 @@
 """
 
 from typing import Literal
-from core.transcribe_base import Transcriber
+from core.transcribe_base import TranscribeBase
 from core.models import ParaformerV1Transcriber, ParaformerV2Transcriber
 
 
 def create_transcriber(
     model_type: Literal["v1", "v2", "live", "diary"] | None = None,
     **kwargs
-) -> Transcriber:
+) -> TranscribeBase:
     """
     工厂函数：创建转录器实例
     
@@ -53,7 +53,7 @@ def create_transcriber(
         raise ValueError(f"未知的转录器类型: {model_type}")
 
 
-def get_default_transcriber(use_v1: bool = False, **kwargs) -> Transcriber:
+def get_default_transcriber(use_v1: bool = False, **kwargs) -> TranscribeBase:
     """
     获取默认转录器
     
