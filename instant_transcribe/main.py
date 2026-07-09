@@ -7,13 +7,13 @@ import sys
 import time
 from pathlib import Path
 
-from ..config.config import CONFIG  
+from ..config.config import CFG
 
 ROOT = Path(__file__).resolve().parent.parent # 总项目目录
-LOCK = Path(CONFIG["live"]["lock_file"])
+LOCK = Path(CFG.lock_file)
 STATUS = Path(str(LOCK) + "_status")
 
-RESULT = Path(CONFIG["live"]["result_file"])
+RESULT = Path(CFG.result_file)
 
 
 def _start_daemon() -> bool:

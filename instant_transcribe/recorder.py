@@ -3,14 +3,14 @@ import sys
 import time as time_module
 import numpy as np
 import sounddevice as sd
-from config.config import CONFIG
+from config.config import CFG
 
 
 class LiveRecorder:
     def __init__(self, max_duration: int | None = None):
         if max_duration is None:
-            max_duration = CONFIG.get("live", {}).get("max_duration", 60)
-        self.sr = CONFIG["sample_rate"]
+            max_duration = CFG.max_duration or 60
+        self.sr = CFG.sample_rate
         self.max_duration = max_duration
         self._buffer: queue.Queue[np.ndarray] = queue.Queue()
         self._last_callback: float = 0.0

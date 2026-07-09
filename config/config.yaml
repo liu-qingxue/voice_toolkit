@@ -17,12 +17,14 @@ models:
     params: 
       ncpu: 2
 # ─── 工作模式设定与当前工作模式 ────────────────────────────
-mode: live
 live:
   model: paraformer_v1
   max_duration: 6000          # 最长录音秒数
   idle_timeout_sec: 3600     # 空闲模型释放秒数(0=禁用）
-  output_mode: window         # 输出方式: notification | cursor | window
+  output_mode: window         # 输出方式: notification | cursor | window | None(无前端参数)
+batch:
+  model: paraformer_v2
+# ─── 前端参数 ──────────────────────────────────────────
 window:
   popup_copy_delay: 200       # 复制后停留毫秒，然后开始淡出
   popup_fade_ms: 300          # 淡出动画持续毫秒

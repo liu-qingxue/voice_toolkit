@@ -3,6 +3,7 @@ import yaml
 import copy
 
 _yaml_path = Path(__file__).resolve().parent / "config.yaml"
+
 class Config:
     default_config = {
         "sample_rate": 16000,
@@ -21,21 +22,25 @@ class Config:
                 "params": {"ncpu": 2},
             },
         },
-        "mode": "live",
         "live":{
                 "model": "paraformer_v1",
                 "max_duration": 6000,
                 "idle_timeout_sec": 3600,
                 "output_mode": "window"
                 },
+        "batch":{
+            "model":"paraformer_v2"
+        },
         "window": {
             "popup_copy_delay": 200,
             "popup_fade_ms": 300,
         }
     }
-    def __init__(self):
+    
+    def __init__(self,mode:str="live"):
         self.config = copy.deepcopy(self.default_config)
         self.load()
+        self.mode= mode
     
     def load(self):
         if _yaml_path.exists():
@@ -107,11 +112,6 @@ class Config:
     def result_file(self) -> str :
         """转写结果暂存路径, .json结尾"""
         return self.config["result_file"]
-    # ==== 工作模式 ============
-    @property
-    def mode(self) -> str :
-        """工作模式"""
-        return self.config["mode"]
     # ==== 模型配置 =================
     @property
     def model(self) -> str :
@@ -126,21 +126,27 @@ class Config:
         """模型的cpu线程"""
         return self.config["models"][self.model]["params"]["ncpu"]
     
-    # ==== 工作模式共有参数 =======================
+    # ==== live工作模式参数 =======================
     @property
-    def max_duration(self) -> int :
-        """最长录音秒数"""
-        return self.config[self.mode]["max_duration"]
+    def max_duration(self) -> int | None:
+        """live的最长录音秒数,非live返回None"""
+        if "max_duration" in self.config[self.mode]:
+            return self.config[self.mode]["max_duration"]
+        return None
     @property
-    def idle_timeout_sec(self) -> int :
-        """空闲模型释放秒数(0=禁用）"""
-        return self.config[self.mode]["idle_timeout_sec"]
-    
+    def idle_timeout_sec(self) -> int | None :
+        """live的空闲模型释放秒数(0=禁用）,非live返回None"""
+        if "idle_timeout_sec" in self.config[self.mode]:
+            return self.config[self.mode]["idle_timeout_sec"]
+        return None
+    # ==== batch工作模式参数 ======================
     # ==== 前端类型 ===============================
     @property
-    def output_mode(self) -> str :
-        """输出方式: notification | cursor | window"""
-        return self.config[self.mode]["output_mode"]
+    def output_mode(self) -> str | None :
+        """输出方式: notification | cursor | window | None(无)"""
+        if "output_mode" in self.config[self.mode]:
+            return self.config[self.mode]["output_mode"]
+        return None
     # ==== 窗口前端参数 =============================
     @property
     def window_popup_copy_delay(self) -> int :
@@ -155,5 +161,5 @@ class Config:
         if not self.output_mode == "window":
             print(f"警告 当前工作模式是{self.output_mode}, 仍然返回参数")
         return self.config["window"]["popup_fade_ms"]
-            
-        
+
+CFG = Config()

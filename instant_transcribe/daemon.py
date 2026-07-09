@@ -11,7 +11,7 @@ from PyQt6.QtCore import QObject, QProcess, Qt, QTimer
 from PyQt6.QtGui import QClipboard, QGuiApplication, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
-from ..config.config import CONFIG
+from ..config.config import CFG
 from ..instant_transcribe.engine import LiveEngine
 from ..instant_transcribe.recorder import LiveRecorder
 from ..instant_transcribe.safe_release import SafeRelease
@@ -25,11 +25,11 @@ logger = logging.getLogger(__name__)
 
 ROOT=Path(__file__).resolve().parent.parent
 
-LOCK = Path(CONFIG["live"]["lock_file"])
+LOCK = Path(CFG.lock_file)
 STATUS = Path(str(LOCK) + "_status")
 
-RESULT = Path(CONFIG["live"]["result_file"])
-IDLE_TIMEOUT = CONFIG.get("live", {}).get("idle_timeout_sec", 3600)
+RESULT = Path(CFG.result_file)
+IDLE_TIMEOUT = CFG.idle_timeout_sec or 3600
 
 HELPER = (ROOT / "global_shortcut_helper" / "build" / "global-shortcut-helper")
 
@@ -378,7 +378,7 @@ class Daemon(QObject):
                 RESULT.write_text(json.dumps({"text": text}), encoding="utf-8")
                 _debug("_transcribe_and_output: RESULT 已写入")
                 self._reset_idle()
-                mode = CONFIG.get("live", {}).get("output_mode", "notification")
+                mode = CFG.output_mode or "notification"
                 _debug(f"_transcribe_and_output: output_mode={mode}")
                 if mode == "window":
                     from instant_transcribe.popup import TranscriptionPopup

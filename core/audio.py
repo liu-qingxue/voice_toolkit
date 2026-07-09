@@ -2,9 +2,9 @@ import wave
 from pathlib import Path
 
 import numpy as np
-from config.config import CONFIG
+from config.config import CFG
 
-SAMPLE_RATE = CONFIG["sample_rate"]
+SAMPLE_RATE = CFG.sample_rate
 
 
 def load_wav(path: str | Path) -> tuple[np.ndarray, int]:

@@ -3,12 +3,11 @@ from PyQt6.QtWidgets import (
     QApplication, QHBoxLayout, QPushButton, QTextEdit,
     QVBoxLayout, QWidget,
 )
-from config.config import CONFIG
+from config.config import CFG
 
 
-_live = CONFIG.get("live", {})
-_DELAY = _live.get("popup_copy_delay", 400)
-_FADE = _live.get("popup_fade_ms", 300)
+_DELAY = CFG.window_popup_copy_delay
+_FADE = CFG.window_popup_fade_ms
 
 
 class TranscriptionPopup(QWidget):

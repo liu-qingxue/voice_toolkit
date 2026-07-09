@@ -2,7 +2,7 @@ import logging
 import tempfile
 import os
 import numpy as np
-from config.config import CONFIG
+from config.config import CFG
 from core.transcribe_base import TranscribeBase
 from pathlib import Path
 
@@ -25,7 +25,7 @@ class ParaformerV1Transcriber(TranscribeBase):
     MODEL_ID = "iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
 
     def __init__(self, ncpu: int | None = None, model_dir: str | None = None):
-        self.ncpu = ncpu or CONFIG.get("model", {}).get("ncpu", 2)
+        self.ncpu = ncpu or CFG.ncpu
         self.model_dir = model_dir
         self._model = None
 
@@ -37,13 +37,12 @@ class ParaformerV1Transcriber(TranscribeBase):
         if self._model is not None:
             return
         from funasr import AutoModel
-        model_id = CONFIG.get("model", {}).get("live") or self.MODEL_ID
-        model_dir = self.model_dir or CONFIG.get("model", {}).get("dir")
+        model_dir = self.model_dir or CFG.model_dir
 
         if not model_dir:
             model_dir = str(Path.home() / ".cache/modelscope/hub")
 
-        model_path = _local_path(model_id)
+        model_path = model_dir
         vad_path = _local_path("iic/speech_fsmn_vad_zh-cn-16k-common-pytorch")
         punc_path = _local_path("iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch")
 
@@ -128,7 +127,7 @@ class ParaformerV2Transcriber(TranscribeBase):
     MODEL_ID = "iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
 
     def __init__(self, ncpu: int | None = None, model_dir: str | None = None):
-        self.ncpu = ncpu or CONFIG.get("model", {}).get("ncpu", 2)
+        self.ncpu = ncpu or CFG.ncpu
         self.model_dir = model_dir
         self._model = None
 
@@ -140,13 +139,12 @@ class ParaformerV2Transcriber(TranscribeBase):
         if self._model is not None:
             return
         from funasr import AutoModel
-        model_id = CONFIG.get("model", {}).get("diary") or self.MODEL_ID
-        model_dir = self.model_dir or CONFIG.get("model", {}).get("dir")
+        model_dir = self.model_dir or CFG.model_dir
 
         if not model_dir:
             model_dir = str(Path.home() / ".cache/modelscope/hub")
 
-        model_path = _local_path(model_id)
+        model_path = model_dir
         vad_path = _local_path("iic/speech_fsmn_vad_zh-cn-16k-common-pytorch")
         punc_path = _local_path("iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch")
 
