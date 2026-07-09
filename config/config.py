@@ -15,10 +15,14 @@ class Config:
         "models": {
             "paraformer_v1": {
                 "dir": "~/.cache/modelscope/hub/models/iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/",
+                "vad_dir":"~/.cache/modelscope/hub/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
+                "punc_dir":"~/.cache/modelscope/hub/models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
                 "params": {"ncpu": 2},
             },
             "paraformer_v2": {
                 "dir": "~/.cache/modelscope/hub/models/iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch/",
+                "vad_dir":"~/.cache/modelscope/hub/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
+                "punc_dir":"~/.cache/modelscope/hub/models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
                 "params": {"ncpu": 2},
             },
         },
@@ -125,6 +129,14 @@ class Config:
     def ncpu(self) -> int :
         """模型的cpu线程"""
         return self.config["models"][self.model]["params"]["ncpu"]
+    @property
+    def vad_dir(self) ->str :
+        """vad模型的父路径,以 ~ 开头,以 / 结束!"""
+        return self.config["models"][self.model]["vad_dir"]
+    @property
+    def punc_dir(self) ->str :
+        """punc(标点)模型的父路径,以 ~ 开头,以 / 结束!"""
+        return self.config["models"][self.model]["punc_dir"]
     
     # ==== live工作模式参数 =======================
     @property

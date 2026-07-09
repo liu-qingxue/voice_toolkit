@@ -8,25 +8,17 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-os.environ.setdefault("MODELSCOPE_DISABLE_NETWORK", "1")
-
-MODELSCOPE_CACHE_ROOT = Path.home() / ".cache/modelscope/hub"
-
-
-def _local_path(model_id: str) -> str:
-    """将 ModelScope 模型 ID 转换为本地缓存绝对路径"""
-    parts = model_id.split("/", 1)
-    return str(MODELSCOPE_CACHE_ROOT / "models" / parts[0] / parts[1])
+os.environ.setdefault("MODELSCOPE_DISABLE_NETWORK", "1") # .setdefault(key, value)	只在 key 不存在 时才设值（已存在则跳过）
 
 class ParaformerV1Transcriber(TranscribeBase):
     """SeACo-Paraformer — 实时转录用。
     最优配置: ncpu=2, 纯净 CER=7.68%, RTF=0.187x
     """
-    MODEL_ID = "iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
-
-    def __init__(self, ncpu: int | None = None, model_dir: str | None = None):
-        self.ncpu = ncpu or CFG.ncpu
-        self.model_dir = model_dir
+    def __init__(self):
+        self.ncpu = CFG.ncpu
+        self.model_dir = CFG.model_dir
+        self.vad_dir = CFG.vad_dir
+        self.punc_dir = CFG.punc_dir
         self._model = None
 
     @property
@@ -34,38 +26,31 @@ class ParaformerV1Transcriber(TranscribeBase):
         return self._model is not None
 
     def load(self):
+        """已经加载了model就返回None"""
         if self._model is not None:
             return
+        
         from funasr import AutoModel
-        model_dir = self.model_dir or CFG.model_dir
-
-        if not model_dir:
-            model_dir = str(Path.home() / ".cache/modelscope/hub")
-
-        model_path = model_dir
-        vad_path = _local_path("iic/speech_fsmn_vad_zh-cn-16k-common-pytorch")
-        punc_path = _local_path("iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch")
-
-        for name, path in [("主模型", model_path), ("VAD", vad_path), ("标点", punc_path)]:
+        for name, path in [("主模型", self.model_dir), ("VAD", self.vad_dir), ("标点", self.punc_dir)]:
             if not os.path.exists(path):
                 raise FileNotFoundError(f"本地{name}模型路径不存在: {path}")
 
         kwargs = dict(
-            model=model_path,
+            model=self.model_dir,
             model_revision="v2.0.4",
             ncpu=self.ncpu,
             device="cpu",
             disable_pbar=True,
             disable_update=True,
-            cache_dir=model_dir,
-            vad_model=vad_path,
+            cache_dir=self.model_dir,
+            vad_model=self.vad_dir,
             vad_model_revision="v2.0.4",
             vad_kwargs={"max_single_segment_time": 30000},
-            punc_model=punc_path,
+            punc_model=self.punc_dir,
             punc_model_revision="v2.0.4",
         )
-        if model_dir:
-            kwargs["model_dir"] = model_dir
+        if self.model_dir:
+            kwargs["model_dir"] = self.model_dir
         self._model = AutoModel(**kwargs)
 
     def transcribe(self, audio: np.ndarray, sample_rate: int = 16000) -> str:

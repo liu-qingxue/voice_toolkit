@@ -10,10 +10,14 @@ result_file: /tmp/live_transcriber_result.json
 models:
   paraformer_v1: 
     dir: ~/.cache/modelscope/hub/models/iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/  # 推荐实时使用
+    vad_path: ~/.cache/modelscope/hub/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch/
+    punc_path: ~/.cache/modelscope/hub/models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch/
     params: 
       ncpu: 2              # cpu线程
   paraformer_v2:
     dir: ~/.cache/modelscope/hub/models/iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch/
+    vad_path: ~/.cache/modelscope/hub/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch/
+    punc_path: ~/.cache/modelscope/hub/models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch/
     params: 
       ncpu: 2
 # ─── 工作模式设定与当前工作模式 ────────────────────────────
