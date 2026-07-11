@@ -9,7 +9,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core.model_factory import create_transcriber
+from core.create_transcriber import create_transcriber
 
 AUDIO_EXTENSIONS = {".wav", ".m4a"}
 MODEL_LABELS = {

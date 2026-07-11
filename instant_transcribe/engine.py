@@ -1,5 +1,5 @@
 from core.transcribe_base import TranscribeBase
-from core.model_factory import create_transcriber, get_default_transcriber
+from core.create_transcriber import create_transcriber, get_default_transcriber
 
 
 class LiveEngine:
