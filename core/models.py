@@ -52,12 +52,13 @@ class ParaformerTranscriber(TranscribeBase):
         )
         self._model = AutoModel(**kwargs)
 
-    def transcribe(self, audio: np.ndarray | Path | str) -> str:
-        """audio无论是路径还是数组都可返回
-        转录后的,处理好的str"""
+    def transcribe(self, audio: np.ndarray | Path | str,sample_rate: int = 16000) -> str:
+        """### audio无论是路径还是数组都可返回 *转录*后的,*处理*好的str
+        - 对于 sample_rate 默认为16k,对于 Paraformer 模型只能为16k
+        """
         # 1. 如果是路径，立刻加载成数组
         if isinstance(audio,(str,Path)):
-            audio=load_wav(audio)
+            audio, _ = load_wav(audio)
 
         # 2. 现在 audio 一定是 np.ndarray,安全地做数组操作
         if len(audio) == 0:
