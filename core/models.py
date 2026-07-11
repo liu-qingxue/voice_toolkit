@@ -5,6 +5,7 @@ import numpy as np
 from config.config import CFG
 from core.transcribe_base import TranscribeBase
 from pathlib import Path
+from funasr import AutoModel
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,6 @@ class ParaformerV1Transcriber(TranscribeBase):
         if self._model is not None:
             return
         
-        from funasr import AutoModel
         for name, path in [("主模型", self.model_dir), ("VAD", self.vad_dir), ("标点", self.punc_dir)]:
             if not os.path.exists(path):
                 raise FileNotFoundError(f"本地{name}模型路径不存在: {path}")
@@ -40,36 +40,33 @@ class ParaformerV1Transcriber(TranscribeBase):
             model_revision="v2.0.4",
             ncpu=self.ncpu,
             device="cpu",
-            disable_pbar=True,
-            disable_update=True,
-            cache_dir=self.model_dir,
+            disable_pbar=True,  # 无加载进度条
+            disable_update=True, # 不更新
             vad_model=self.vad_dir,
             vad_model_revision="v2.0.4",
-            vad_kwargs={"max_single_segment_time": 30000},
+            vad_kwargs={"max_single_segment_time": 30000},  # VAD 参数：单段最长 30 秒
             punc_model=self.punc_dir,
             punc_model_revision="v2.0.4",
         )
-        if self.model_dir:
-            kwargs["model_dir"] = self.model_dir
         self._model = AutoModel(**kwargs)
 
     def transcribe(self, audio: np.ndarray, sample_rate: int = 16000) -> str:
         if len(audio) == 0:
             return ""
-        if audio.ndim > 1:
-            audio = audio.squeeze()
         if self._model is None:
             try:
                 self.load()
             except Exception as e:
                 logger.error(f"[V1] 模型加载失败: {e}", exc_info=True)
                 return "[模型加载错误]"
+        if audio.ndim > 1:
+            audio = audio.squeeze()  # 某些录音设备返回的音频带多余的维度,模型只认一维数组,去掉大小为1的维度
         
         tmp_path = None
         try:
             from core.audio import save_wav
             tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            tmp_path = tmp.name
+            tmp_path = tmp.name  # 这里实际上获取了path
             tmp.close()
             
             save_wav(tmp_path, audio, sample_rate)
@@ -91,10 +88,6 @@ class ParaformerV1Transcriber(TranscribeBase):
                     os.unlink(tmp_path)
                 except OSError as e:
                     logger.warning(f"[V1] 临时文件删除失败: {tmp_path}, {e}")
-
-    def unload(self):
-        self._model = None
-
     @staticmethod
     def _extract(result) -> str:
         if isinstance(result, list):
@@ -103,6 +96,10 @@ class ParaformerV1Transcriber(TranscribeBase):
         if isinstance(result, dict):
             return result.get("text", "").strip()
         return str(result).strip()
+
+    def unload(self):
+        self._model = None
+
 
 
 class ParaformerV2Transcriber(TranscribeBase):
