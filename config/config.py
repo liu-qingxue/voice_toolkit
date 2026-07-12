@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import yaml
 import copy
@@ -30,10 +31,12 @@ class Config:
                 "model": "paraformer_v1",
                 "max_duration": 6000,
                 "idle_timeout_sec": 3600,
-                "output_mode": "window"
+                "output_mode": "window",
+                "stream":True
                 },
         "batch":{
-            "model":"paraformer_v2"
+            "model":"paraformer_v2",
+            "stream":False
         },
         "window": {
             "popup_copy_delay": 200,
@@ -123,21 +126,26 @@ class Config:
         return self.config[self.mode]["model"]
     @property
     def model_dir(self) ->str :
-        """模型的父路径,以 ~ 开头,以 / 结束!"""
-        return self.config["models"][self.model]["dir"]
+        """模型的父路径"""
+        return os.path.expanduser(self.config["models"][self.model]["dir"])
     @property
     def ncpu(self) -> int :
         """模型的cpu线程"""
         return self.config["models"][self.model]["params"]["ncpu"]
     @property
     def vad_dir(self) ->str :
-        """vad模型的父路径,以 ~ 开头,以 / 结束!"""
-        return self.config["models"][self.model]["vad_dir"]
+        """vad模型的父路径"""
+        return os.path.expanduser(self.config["models"][self.model]["vad_dir"])
     @property
     def punc_dir(self) ->str :
-        """punc(标点)模型的父路径,以 ~ 开头,以 / 结束!"""
-        return self.config["models"][self.model]["punc_dir"]
+        """punc(标点)模型的父路径"""
+        return os.path.expanduser(self.config["models"][self.model]["punc_dir"])
     
+    # ==== 均有的工作模式参数 ======================
+    @property
+    def is_stream(self) -> bool:
+        """是否流式输出（根据当前模式读取 live/batch 下的 stream 字段）"""
+        return self.config[self.mode].get("stream", False)
     # ==== live工作模式参数 =======================
     @property
     def max_duration(self) -> int | None:
