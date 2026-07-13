@@ -131,7 +131,7 @@ class Config:
     @property
     def cannel_cmd(self):
         """轻量级进程间通信(IPC)通道,传递命令"""
-        return Path(str(self.lock)+"_cmd")
+        return Path(str(self.lock_file)+"_cmd")
     # ==== 模型配置 =================
     @property
     def model(self) -> str :
