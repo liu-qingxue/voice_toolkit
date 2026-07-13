@@ -128,6 +128,10 @@ class Config:
     def ROOT(self) -> Path :
         """项目根目录（通过 config 位置自动定位）"""
         return Path(__file__).resolve().parent.parent
+    @property
+    def cannel_cmd(self):
+        """轻量级进程间通信(IPC)通道,传递命令"""
+        return Path(str(self.lock)+"_cmd")
     # ==== 模型配置 =================
     @property
     def model(self) -> str :

@@ -26,7 +26,7 @@ from live.dispatcher import dispatch
 
 LOCK = CFG.lock_file
 RESULT = CFG.result_file
-CMD = LOCK.with_name(LOCK.name + "_cmd")
+CMD = CFG.cannel_cmd
 
 IDLE_TIMEOUT = CFG.idle_timeout_sec or 3600
 

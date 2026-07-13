@@ -18,8 +18,7 @@ from config import CFG
 
 LOCK = CFG.lock_file
 RESULT = CFG.result_file
-CMD = Path(str(LOCK) + "_cmd")
-
+CMD = CFG.cannel_cmd
 
 def _daemon_alive() -> bool:
     """检查守护进程是否持有排他锁"""
