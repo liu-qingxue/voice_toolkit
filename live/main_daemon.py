@@ -5,37 +5,76 @@ live 守护进程
 import json
 import os
 import sys
+import fcntl
 import threading
 import logging
+import concurrent.futures
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(CFG.ROOT)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from PyQt6.QtCore import Qt, QObject, QProcess, QTimer
+from PyQt6.QtCore import Qt, QObject, QProcess, QTimer, QFileSystemWatcher
 from PyQt6.QtGui import QIcon, QPainter, QPixmap, QAction
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from config import CFG
-from core.create_transcriber import create_transcriber
+from core import create_transcriber
 from live.recorder import LiveRecorder
 from live.dispatcher import dispatch
 
-ROOT = Path(__file__).resolve().parent.parent
 LOCK = Path(CFG.lock_file)
 RESULT = Path(CFG.result_file)
 CMD = Path(str(LOCK) + "_cmd")
 IDLE_TIMEOUT = CFG.idle_timeout_sec or 3600
 HELPER = ROOT / "global_shortcut_helper" / "build" / "global-shortcut-helper"
-DEBUG_LOG = Path("/tmp/live_transcriber_debug.log")
+DEBUG_LOG = Path(CFG.debug)
 
 logger = logging.getLogger(__name__)
-
-
 def _debug(msg: str):
     with DEBUG_LOG.open("a", encoding="utf-8") as f:
         f.write(f"[{os.getpid()}] {msg}\n")
+
+_lock_fd: int | None = None
+_transcriber = None
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+
+def _try_lock() -> bool:
+    """获取排他锁—已有实例则返回 False"""
+    global _lock_fd
+    try:
+        _lock_fd = os.open(str(LOCK), os.O_CREAT | os.O_RDWR)   # 读写模式+文件不存在时自动创建
+    except OSError as e:
+        print(f"系统错误,无法创建锁文件: {e}", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"错误: {e}", file=sys.stderr)
+        return False
+    try:
+        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)   # 排他锁 + 非阻塞(Non-Blocking)—拿不到就立刻报错，不等
+    except BlockingIOError:
+        os.close(_lock_fd)
+        _lock_fd = None
+        return False
+    except OSError as e:
+        print(f"系统错误,获取文件锁失败: {e}", file=sys.stderr)
+        os.close(_lock_fd)
+        _lock_fd = None
+        return False 
+    except Exception as e:
+        print(f"错误: {e}", file=sys.stderr)
+        return False
+    return True
+
+
+def _release_lock():
+    global _lock_fd
+    if _lock_fd is not None:
+        fcntl.flock(_lock_fd, fcntl.LOCK_UN)
+        os.close(_lock_fd)
+        _lock_fd = None
 
 
 # ── 托盘图标 ──────────────────────────────
@@ -52,7 +91,7 @@ def _build_icon(color):
     return QIcon(pix)
 
 
-# ── 核心循环 ──────────────────────────────
+# ── 核心事件循环 ──────────────────────────
 
 class LiveLoop(QObject):
     def __init__(self, tray: QSystemTrayIcon, parent=None):
@@ -61,7 +100,7 @@ class LiveLoop(QObject):
         self._recorder: LiveRecorder | None = None
         self._rec_thread: threading.Thread | None = None
         self._transcribing = False
-        self._queue: list[str] = []
+        self._transcribe_future: concurrent.futures.Future | None = None
 
         self._icon_idle = _build_icon(Qt.GlobalColor.gray)
         self._icon_rec = _build_icon(Qt.GlobalColor.red)
@@ -69,56 +108,47 @@ class LiveLoop(QObject):
 
         CMD.unlink(missing_ok=True)
 
-        self._poll_cnt = 0
-        self._poll = QTimer(self)
-        self._poll.timeout.connect(self._poll_queue)
-        self._poll.start(100)
+        # ── 文件变更监控 ──
+        self._fs_watcher = QFileSystemWatcher(self)
+        self._fs_watcher.directoryChanged.connect(self._on_cmd_dir_changed)
+        self._fs_watcher.addPath(str(CMD.parent))
 
+        # ── 转录结果轮询 (保持低开销，转录完成后立即 dispatch) ──
+        self._transcribe_poll = QTimer(self)
+        self._transcribe_poll.timeout.connect(self._poll_transcribe)
+        self._transcribe_poll.start(100)
+
+        # ── 空闲卸载计时器 ──
         self._idle = QTimer(self)
         self._idle.setSingleShot(True)
         self._idle.timeout.connect(self._on_idle)
-
-        self._transcriber = None
         self._reset_idle()
 
-    def _poll_queue(self):
-        self._poll_cnt += 1
-        if self._poll_cnt % 100 == 0:
-            _debug(f"_poll_queue 已触发 {self._poll_cnt} 次")
-        # 检查命令文件
-        if CMD.exists():
-            _debug("CMD 文件存在")
-            try:
-                cmd = CMD.read_text().strip()
-                CMD.unlink(missing_ok=True)
-                _debug(f"CMD 内容: {cmd!r}")
-            except Exception as e:
-                _debug(f"CMD 读取异常: {e}")
-                cmd = ""
-            if cmd == "toggle":
-                self._queue.append("toggle")
-            elif cmd == "quit":
-                self._queue.append("quit")
-            elif cmd == "release":
-                self._queue.append("release")
+    def _on_cmd_dir_changed(self, path: str):
+        """CMD 文件所在的目录有变动时触发"""
+        if not CMD.exists():
+            return
+        try:
+            cmd = CMD.read_text().strip()
+            CMD.unlink(missing_ok=True)
+        except Exception:
+            return
 
-        while self._queue:
-            msg = self._queue.pop(0)
-            _debug(f"处理队列消息: {msg}")
-            if msg == "toggle":
-                self._toggle()
-            elif msg == "release":
-                self._release_engine()
-            elif msg == "quit":
-                self._on_quit()
+        _debug(f"CMD 内容: {cmd!r}")
+        if cmd == "quit":
+            self._on_quit()
+        elif cmd == "release":
+            self._release_engine()
+        elif cmd == "toggle":
+            self._toggle()
 
     # ── 录音控制 ──────────────────────────
 
     def _toggle(self):
         if self._transcribing:
-            self._tray.showMessage("提示", "正在转录中，请稍候", QSystemTrayIcon.MessageIcon.Information, 2000)
+            self._tray.showMessage("提示", "正在转录中，请稍候",
+                                   QSystemTrayIcon.MessageIcon.Information, 2000)
             return
-
         if self._recorder is None:
             self._start_recording()
         else:
@@ -143,19 +173,29 @@ class LiveLoop(QObject):
             self._back_to_idle()
             return
 
+        global _transcriber
         self._transcribing = True
         self._tray.setIcon(self._icon_loaded)
         self._tray.setToolTip("转录中")
 
+        if _transcriber is None:
+            _transcriber = create_transcriber()
+        self._transcribe_future = _executor.submit(_transcriber.transcribe, audio)
+
+    def _poll_transcribe(self):
+        """检查异步转录是否完成（在主线程中执行 dispatch）"""
+        if self._transcribe_future is None:
+            return
+        if not self._transcribe_future.done():
+            return
+        text = ""
         try:
-            if self._transcriber is None:
-                self._transcriber = create_transcriber()
-            text = self._transcriber.transcribe(audio)
+            text = self._transcribe_future.result()
         except Exception as e:
             _debug(f"转录异常: {e}")
-            self._tray.showMessage("转录失败", str(e), QSystemTrayIcon.MessageIcon.Critical, 5000)
-            text = ""
-
+            self._tray.showMessage("转录失败", str(e),
+                                   QSystemTrayIcon.MessageIcon.Critical, 5000)
+        self._transcribe_future = None
         self._transcribing = False
 
         dispatch(text,
@@ -165,7 +205,8 @@ class LiveLoop(QObject):
         self._back_to_idle()
 
     def _show_notification(self, preview: str):
-        self._tray.showMessage("转录结果", preview, QSystemTrayIcon.MessageIcon.Information, 5000)
+        self._tray.showMessage("转录结果", preview,
+                               QSystemTrayIcon.MessageIcon.Information, 5000)
 
     def _show_window(self, text: str):
         from live.popup import TranscriptionPopup
@@ -179,12 +220,13 @@ class LiveLoop(QObject):
     # ── 模型管理 ──────────────────────────
 
     def _release_engine(self):
-        if self._transcriber is not None:
+        global _transcriber
+        if _transcriber is not None:
             try:
-                self._transcriber.unload()
+                _transcriber.unload()
             except Exception:
                 pass
-            self._transcriber = None
+            _transcriber = None
         self._idle.stop()
         self._back_to_idle()
         _debug("模型已释放")
@@ -205,11 +247,11 @@ class LiveLoop(QObject):
             if self._rec_thread:
                 self._rec_thread.join(timeout=3)
         self._release_engine()
-        self._poll.stop()
+        self._transcribe_poll.stop()
         self._idle.stop()
         CMD.unlink(missing_ok=True)
-        LOCK.unlink(missing_ok=True)
         RESULT.unlink(missing_ok=True)
+        _release_lock()
         QApplication.quit()
 
 
@@ -217,32 +259,15 @@ class LiveLoop(QObject):
 
 def main():
     _debug("=== 守护进程启动 ===")
-
-    # 清理旧资源
     RESULT.unlink(missing_ok=True)
 
-    # 单例检测
-    if LOCK.exists():
-        try:
-            old_pid = int(LOCK.read_text().strip())
-            os.kill(old_pid, 0)
-            print("已有实例在运行", file=sys.stderr)
-            sys.exit(1)
-        except ValueError:
-            LOCK.unlink(missing_ok=True)
-        except ProcessLookupError:
-            LOCK.unlink(missing_ok=True)
-        except PermissionError:
-            print("权限不足，无法确认旧实例状态", file=sys.stderr)
-            sys.exit(1)
-        except OSError:
-            LOCK.unlink(missing_ok=True)
+    if not _try_lock():
+        print("已有实例在运行", file=sys.stderr)
+        sys.exit(1)
 
-    # Qt 应用
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
-    # 系统托盘
     tray = QSystemTrayIcon()
     idle_icon = _build_icon(Qt.GlobalColor.gray)
     tray.setIcon(idle_icon)
@@ -256,16 +281,14 @@ def main():
     tray.setContextMenu(menu)
     tray.show()
 
-    # 核心循环
     loop = LiveLoop(tray)
 
-    # 菜单联动
     def update_menu():
         if loop._recorder is not None:
             act_status.setText("状态: 录音中")
         elif loop._transcribing:
             act_status.setText("状态: 转录中")
-        elif loop._transcriber is not None and hasattr(loop._transcriber, 'is_loaded') and loop._transcriber.is_loaded:
+        elif _transcriber is not None and hasattr(_transcriber, 'is_loaded') and _transcriber.is_loaded:
             act_status.setText("状态: 模型已加载")
         else:
             act_status.setText("状态: 待机")
@@ -274,14 +297,8 @@ def main():
     menu_timer.timeout.connect(update_menu)
     menu_timer.start(500)
 
-    # 退出菜单
     act_quit.triggered.connect(loop._on_quit)
 
-    # 写入 LOCK
-    LOCK.write_text(str(os.getpid()))
-    _debug(f"LOCK 已写入 (pid={os.getpid()})")
-
-    # Helper 进程（父对象为 loop，保证生命周期）
     helper = QProcess(loop)
     if HELPER.exists():
         def _start_helper():

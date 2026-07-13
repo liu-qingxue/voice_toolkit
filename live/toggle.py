@@ -4,6 +4,7 @@ live 切换脚本。
 """
 import json
 import os
+import fcntl
 import subprocess
 import sys
 import time
@@ -18,6 +19,23 @@ from config import CFG
 LOCK = Path(CFG.lock_file)
 RESULT = Path(CFG.result_file)
 CMD = Path(str(LOCK) + "_cmd")
+
+
+def _daemon_alive() -> bool:
+    """检查守护进程是否持有排他锁"""
+    try:
+        fd = os.open(str(LOCK), os.O_RDONLY)
+    except FileNotFoundError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        # 拿到共享锁 → 没有排他锁持有者 → daemon 已死
+        os.close(fd)
+        return False
+    except BlockingIOError:
+        # 拿不到共享锁 → 排他锁被持有 → daemon 活着
+        os.close(fd)
+        return True
 
 
 def _start_daemon() -> bool:
@@ -54,27 +72,10 @@ def _start_daemon() -> bool:
 
 
 def toggle():
-    if not LOCK.exists():
+    if not _daemon_alive():
         if not _start_daemon():
             sys.exit(1)
         time.sleep(0.5)
-
-    try:
-        pid = int(LOCK.read_text().strip())
-    except (ValueError, FileNotFoundError):
-        LOCK.unlink(missing_ok=True)
-        print("[live] 锁文件损坏", file=sys.stderr)
-        sys.exit(1)
-
-    # 检查守护进程是否存活
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        LOCK.unlink(missing_ok=True)
-        print("[live] daemon 已退出", file=sys.stderr)
-        sys.exit(1)
-    except PermissionError:
-        pass
 
     RESULT.unlink(missing_ok=True)
     CMD.write_text("toggle")

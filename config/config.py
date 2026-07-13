@@ -13,6 +13,8 @@ class Config:
         "segment_seconds": 600,
         "lock_file": "/tmp/live_transcriber.lock",
         "result_file": "/tmp/live_transcriber_result.json",
+        "debug":"/tmp/live_transcriber_debug.log",
+        "ROOT":"~/Projects/voice_toolkit/",
         "models": {
             "paraformer_v1": {
                 "dir": "~/.cache/modelscope/hub/models/iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/",
@@ -119,6 +121,18 @@ class Config:
     def result_file(self) -> str :
         """转写结果暂存路径, .json结尾"""
         return self.config["result_file"]
+    @property
+    def debug(self):
+        """debug的log文件"""
+        return self.config["debug"]
+    @property
+    def ROOT(self):
+        """项目部署的项目目录,注意⚠️:结尾有 / !"""
+        return os.path.expanduser(self.config["ROOT"])
+    @property
+    def shortcut(self):
+        """快捷键注册组件的路径,结尾有 / !"""
+        return self.ROOT+"global_shortcut_helper/"
     # ==== 模型配置 =================
     @property
     def model(self) -> str :

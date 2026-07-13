@@ -3,9 +3,11 @@ sample_rate: 16000          # 录音采样率(hz)
 channels: 1                 # 声道数
 dtype: int16                # 采样位深
 segment_seconds: 600        # 分片秒数。
-# --- 临时文件路径 ----------------------------
+# --- 文件路径 ----------------------------
 lock_file: /tmp/live_transcriber.lock
 result_file: /tmp/live_transcriber_result.json
+debug: /tmp/live_transcriber_debug.log
+ROOT: ~/Projects/voice_toolkit/
 # ─── 模型 ────────────────────────────────
 models:
   paraformer_v1: 
