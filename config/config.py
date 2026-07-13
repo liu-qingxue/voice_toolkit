@@ -128,10 +128,6 @@ class Config:
     def ROOT(self) -> Path :
         """项目根目录（通过 config 位置自动定位）"""
         return Path(__file__).resolve().parent.parent
-    @property
-    def shortcut(self) -> Path :
-        """快捷键注册组件路径"""
-        return self.ROOT / "global_shortcut_helper"
     # ==== 模型配置 =================
     @property
     def model(self) -> str :

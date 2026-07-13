@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent   # 入口处必须要有!!!
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from PyQt6.QtCore import Qt, QObject, QProcess, QTimer, QFileSystemWatcher
+from PyQt6.QtCore import Qt, QObject, QTimer, QFileSystemWatcher
 from PyQt6.QtGui import QIcon, QPainter, QPixmap, QAction
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -29,8 +29,6 @@ RESULT = CFG.result_file
 CMD = LOCK.with_name(LOCK.name + "_cmd")
 
 IDLE_TIMEOUT = CFG.idle_timeout_sec or 3600
-
-HELPER = ROOT / "global_shortcut_helper" / "build" / "global-shortcut-helper"
 
 DEBUG_LOG = CFG.debug
 logger = logging.getLogger(__name__)
@@ -291,18 +289,6 @@ def main():
     menu_timer.start(500)
 
     act_quit.triggered.connect(loop._on_quit)
-
-    helper = QProcess(loop)
-    if HELPER.exists():
-        def _start_helper():
-            try:
-                helper.start(str(HELPER))
-            except RuntimeError:
-                _debug("helper 已销毁，忽略")
-        helper.finished.connect(_start_helper)
-        _start_helper()
-    else:
-        print(f"[live] helper 未找到: {HELPER}", file=sys.stderr)
 
     _debug("Qt 事件循环启动")
     sys.exit(app.exec())
