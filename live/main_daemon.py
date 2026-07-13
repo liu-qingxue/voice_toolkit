@@ -11,7 +11,7 @@ import logging
 import concurrent.futures
 from pathlib import Path
 
-ROOT = Path(CFG.ROOT)
+ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -24,12 +24,12 @@ from core import create_transcriber
 from live.recorder import LiveRecorder
 from live.dispatcher import dispatch
 
-LOCK = Path(CFG.lock_file)
-RESULT = Path(CFG.result_file)
+LOCK = CFG.lock_file
+RESULT = CFG.result_file
 CMD = Path(str(LOCK) + "_cmd")
 IDLE_TIMEOUT = CFG.idle_timeout_sec or 3600
 HELPER = ROOT / "global_shortcut_helper" / "build" / "global-shortcut-helper"
-DEBUG_LOG = Path(CFG.debug)
+DEBUG_LOG = CFG.debug
 
 logger = logging.getLogger(__name__)
 def _debug(msg: str):
@@ -65,6 +65,8 @@ def _try_lock() -> bool:
         return False 
     except Exception as e:
         print(f"错误: {e}", file=sys.stderr)
+        os.close(_lock_fd)
+        _lock_fd = None
         return False
     return True
 

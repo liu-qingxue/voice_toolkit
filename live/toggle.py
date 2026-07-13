@@ -16,8 +16,8 @@ if str(ROOT) not in sys.path:
 
 from config import CFG
 
-LOCK = Path(CFG.lock_file)
-RESULT = Path(CFG.result_file)
+LOCK = CFG.lock_file
+RESULT = CFG.result_file
 CMD = Path(str(LOCK) + "_cmd")
 
 

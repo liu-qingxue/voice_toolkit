@@ -22,10 +22,10 @@ class LiveRecorder:
     def run(self):
         """在子线程中运行：启动音频流，不断采集到 buffer"""
         self._running = True
-        self._buffer = queue.Queue()
+        self._buffer = queue.Queue()   # 重置了队列,防止队列残留
         self._start_time = time_module.time()
 
-        def callback(indata, frames, time_info, status):
+        def callback(indata):
             if self._running:
                 self._buffer.put_nowait(indata.copy())
 

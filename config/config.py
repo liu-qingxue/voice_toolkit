@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 import yaml
 import copy
@@ -14,7 +13,6 @@ class Config:
         "lock_file": "/tmp/live_transcriber.lock",
         "result_file": "/tmp/live_transcriber_result.json",
         "debug":"/tmp/live_transcriber_debug.log",
-        "ROOT":"~/Projects/voice_toolkit/",
         "models": {
             "paraformer_v1": {
                 "dir": "~/.cache/modelscope/hub/models/iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/",
@@ -113,47 +111,48 @@ class Config:
     def segment_seconds(self) -> int :
         """分片秒数"""
         return self.config["segment_seconds"]
+    
     @property
-    def lock_file(self) -> str :
-        """锁文件路径, .lock结尾"""
-        return self.config["lock_file"]
+    def lock_file(self) -> Path :
+        """锁文件路径"""
+        return Path(self.config["lock_file"])
     @property
-    def result_file(self) -> str :
-        """转写结果暂存路径, .json结尾"""
-        return self.config["result_file"]
+    def result_file(self) -> Path :
+        """转写结果暂存路径"""
+        return Path(self.config["result_file"])
     @property
-    def debug(self):
-        """debug的log文件"""
-        return self.config["debug"]
+    def debug(self) -> Path :
+        """debug日志路径"""
+        return Path(self.config["debug"])
     @property
-    def ROOT(self):
-        """项目部署的项目目录,注意⚠️:结尾有 / !"""
-        return os.path.expanduser(self.config["ROOT"])
+    def ROOT(self) -> Path :
+        """项目根目录（通过 config 位置自动定位）"""
+        return Path(__file__).resolve().parent.parent
     @property
-    def shortcut(self):
-        """快捷键注册组件的路径,结尾有 / !"""
-        return self.ROOT+"global_shortcut_helper/"
+    def shortcut(self) -> Path :
+        """快捷键注册组件路径"""
+        return self.ROOT / "global_shortcut_helper"
     # ==== 模型配置 =================
     @property
     def model(self) -> str :
         """模型名称"""
         return self.config[self.mode]["model"]
     @property
-    def model_dir(self) ->str :
+    def model_dir(self) -> Path :
         """模型的父路径"""
-        return os.path.expanduser(self.config["models"][self.model]["dir"])
+        return Path(self.config["models"][self.model]["dir"]).expanduser()
     @property
     def ncpu(self) -> int :
         """模型的cpu线程"""
         return self.config["models"][self.model]["params"]["ncpu"]
     @property
-    def vad_dir(self) ->str :
+    def vad_dir(self) -> Path :
         """vad模型的父路径"""
-        return os.path.expanduser(self.config["models"][self.model]["vad_dir"])
+        return Path(self.config["models"][self.model]["vad_dir"]).expanduser()
     @property
-    def punc_dir(self) ->str :
+    def punc_dir(self) -> Path :
         """punc(标点)模型的父路径"""
-        return os.path.expanduser(self.config["models"][self.model]["punc_dir"])
+        return Path(self.config["models"][self.model]["punc_dir"]).expanduser()
     
     # ==== 均有的工作模式参数 ======================
     @property
