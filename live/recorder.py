@@ -23,11 +23,11 @@ class LiveRecorder:
         """在子线程中运行：启动音频流，不断采集到 buffer"""
         self._running = True
         self._buffer = queue.Queue()   # 重置了队列,防止队列残留
-        self._start_time = time_module.time()
+        self._start_time = time_module.time()   # 记录开始时间
 
-        def callback(indata):
+        def callback(indata, frames, time_info, status):   # 位置约定!!!第一个参数被 sounddevice.InputStream的数组传入
             if self._running:
-                self._buffer.put_nowait(indata.copy())
+                self._buffer.put_nowait(indata.copy())   # 注意要用copy
 
         try:
             self._stream = sd.InputStream(
@@ -36,7 +36,7 @@ class LiveRecorder:
                 dtype="int16",
                 callback=callback,
             )
-            self._stream.start()
+            self._stream.start()   # 开始录音
         except Exception as e:
             print(f"[recorder] 麦克风启动失败: {e}", file=sys.stderr, flush=True)
             self._running = False
@@ -59,12 +59,12 @@ class LiveRecorder:
         chunks = []
         while True:
             try:
-                chunks.append(self._buffer.get_nowait())
+                chunks.append(self._buffer.get_nowait())  # 一直处理队列,然后到报错(queue.Empty是空的报错)
             except queue.Empty:
                 break
 
         if not chunks:
             return None
 
-        audio = np.concatenate(chunks)
+        audio = np.concatenate(chunks)  # concatenate-连接/串联 ,返回一个大的数组
         return audio.astype(np.float32) / 32768.0

@@ -11,7 +11,7 @@ import logging
 import concurrent.futures
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent   # 入口处必须要有!!!
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -26,11 +26,13 @@ from live.dispatcher import dispatch
 
 LOCK = CFG.lock_file
 RESULT = CFG.result_file
-CMD = Path(str(LOCK) + "_cmd")
-IDLE_TIMEOUT = CFG.idle_timeout_sec or 3600
-HELPER = ROOT / "global_shortcut_helper" / "build" / "global-shortcut-helper"
-DEBUG_LOG = CFG.debug
+CMD = LOCK.with_name(LOCK.name + "_cmd")
 
+IDLE_TIMEOUT = CFG.idle_timeout_sec or 3600
+
+HELPER = ROOT / "global_shortcut_helper" / "build" / "global-shortcut-helper"
+
+DEBUG_LOG = CFG.debug
 logger = logging.getLogger(__name__)
 def _debug(msg: str):
     with DEBUG_LOG.open("a", encoding="utf-8") as f:
@@ -39,7 +41,6 @@ def _debug(msg: str):
 _lock_fd: int | None = None
 _transcriber = None
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-
 
 def _try_lock() -> bool:
     """获取排他锁—已有实例则返回 False"""
@@ -70,7 +71,6 @@ def _try_lock() -> bool:
         return False
     return True
 
-
 def _release_lock():
     global _lock_fd
     if _lock_fd is not None:
@@ -78,23 +78,19 @@ def _release_lock():
         os.close(_lock_fd)
         _lock_fd = None
 
-
 # ── 托盘图标 ──────────────────────────────
-
 def _build_icon(color):
-    pix = QPixmap(64, 64)
-    pix.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pix)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(color)
-    p.drawEllipse(4, 4, 56, 56)
+    pix = QPixmap(64, 64)   # 画布
+    pix.fill(Qt.GlobalColor.transparent)   # 透明背景
+    p = QPainter(pix)   # 笔
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)   # 抗锯齿,抗像素带来的"齿轮感"
+    p.setPen(Qt.PenStyle.NoPen)   # 无边框
+    p.setBrush(color)   # 填充色
+    p.drawEllipse(4, 4, 56, 56)   # 图形边界为椭圆,坐标为外接矩形
     p.end()
-    return QIcon(pix)
-
+    return QIcon(pix)   # 一个智能图标,自己可以"感受"鼠标信号来展示不同的图片
 
 # ── 核心事件循环 ──────────────────────────
-
 class LiveLoop(QObject):
     def __init__(self, tray: QSystemTrayIcon, parent=None):
         super().__init__(parent)
@@ -104,21 +100,21 @@ class LiveLoop(QObject):
         self._transcribing = False
         self._transcribe_future: concurrent.futures.Future | None = None
 
-        self._icon_idle = _build_icon(Qt.GlobalColor.gray)
+        self._icon_idle = _build_icon(Qt.GlobalColor.gray)   # 空闲,gray-灰色
         self._icon_rec = _build_icon(Qt.GlobalColor.red)
         self._icon_loaded = _build_icon(Qt.GlobalColor.darkGreen)
 
         CMD.unlink(missing_ok=True)
 
         # ── 文件变更监控 ──
-        self._fs_watcher = QFileSystemWatcher(self)
-        self._fs_watcher.directoryChanged.connect(self._on_cmd_dir_changed)
+        self._fs_watcher = QFileSystemWatcher(self)   # QObject 子类在创建时都可以接受一个 parent 参数 ,负责它的生命周期
+        self._fs_watcher.directoryChanged.connect(self._on_cmd_dir_changed)  # Watcher-观察者
         self._fs_watcher.addPath(str(CMD.parent))
 
         # ── 转录结果轮询 (保持低开销，转录完成后立即 dispatch) ──
-        self._transcribe_poll = QTimer(self)
+        self._transcribe_poll = QTimer(self)   # poll-轮询
         self._transcribe_poll.timeout.connect(self._poll_transcribe)
-        self._transcribe_poll.start(100)
+        self._transcribe_poll.start(100)   # 按设定的时间间隔，定期发射 timeout 信号
 
         # ── 空闲卸载计时器 ──
         self._idle = QTimer(self)
@@ -145,7 +141,6 @@ class LiveLoop(QObject):
             self._toggle()
 
     # ── 录音控制 ──────────────────────────
-
     def _toggle(self):
         if self._transcribing:
             self._tray.showMessage("提示", "正在转录中，请稍候",
@@ -220,7 +215,6 @@ class LiveLoop(QObject):
         _debug("回到待机")
 
     # ── 模型管理 ──────────────────────────
-
     def _release_engine(self):
         global _transcriber
         if _transcriber is not None:
@@ -242,7 +236,6 @@ class LiveLoop(QObject):
         self._release_engine()
 
     # ── 退出 ──────────────────────────────
-
     def _on_quit(self):
         if self._recorder is not None:
             self._recorder.stop()
@@ -256,9 +249,7 @@ class LiveLoop(QObject):
         _release_lock()
         QApplication.quit()
 
-
 # ── 入口 ──────────────────────────────────
-
 def main():
     _debug("=== 守护进程启动 ===")
     RESULT.unlink(missing_ok=True)
@@ -315,7 +306,6 @@ def main():
 
     _debug("Qt 事件循环启动")
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()
