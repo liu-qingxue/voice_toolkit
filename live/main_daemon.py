@@ -17,7 +17,7 @@ from PyQt6.QtCore import Qt, QObject, QProcess, QTimer
 from PyQt6.QtGui import QIcon, QPainter, QPixmap, QAction
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from config.config import CFG
+from config import CFG
 from core.create_transcriber import create_transcriber
 from live.recorder import LiveRecorder
 from live.dispatcher import dispatch

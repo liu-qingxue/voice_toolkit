@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from config.config import CFG
+from config import CFG
 
 
 def dispatch(text: str, *, notify=None, show_window=None):

@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QApplication, QHBoxLayout, QPushButton, QTextEdit,
     QVBoxLayout, QWidget,
 )
-from config.config import CFG
+from config import CFG
 
 
 _DELAY = CFG.window_popup_copy_delay

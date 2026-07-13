@@ -2,7 +2,7 @@ import wave
 from pathlib import Path
 
 import numpy as np
-from config.config import CFG
+from config import CFG
 
 SAMPLE_RATE = CFG.sample_rate
 

@@ -4,7 +4,7 @@
 模型分发在 这里处理，新增模型只需在这里加分支。
 """
 import logging
-from config.config import CFG
+from config import CFG
 from core.models import ParaformerTranscriber
 
 logger = logging.getLogger(__name__)

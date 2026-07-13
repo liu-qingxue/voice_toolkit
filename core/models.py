@@ -1,8 +1,7 @@
 import logging
-import tempfile
 import os
 import numpy as np
-from config.config import CFG
+from config import CFG
 from core.transcribe_base import TranscribeBase
 from pathlib import Path
 from funasr import AutoModel

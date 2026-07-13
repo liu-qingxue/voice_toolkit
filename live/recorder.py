@@ -2,7 +2,7 @@ import queue
 import time as time_module
 import numpy as np
 import sounddevice as sd
-from config.config import CFG
+from config import CFG
 
 
 class LiveRecorder:
