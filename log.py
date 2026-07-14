@@ -14,4 +14,3 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout),          # 终端也保留
     ],
 )
-debug = "/tmp/live_transcriber.log"

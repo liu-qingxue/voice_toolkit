@@ -30,7 +30,7 @@ CMD = CFG.cannel_cmd
 
 IDLE_TIMEOUT = CFG.idle_timeout_sec
 
-DEBUG_LOG = log.debug
+DEBUG_LOG = log.LOG_FILE
 logger = logging.getLogger(__name__)
 
 _lock_fd: int | None = None
@@ -43,10 +43,10 @@ def _try_lock() -> bool:
     try:
         _lock_fd = os.open(str(LOCK), os.O_CREAT | os.O_RDWR)   # 读写模式+文件不存在时自动创建
     except OSError as e:
-        logger.error(f"系统错误,无法创建锁文件: {e}", file=sys.stderr)
+        logger.error(f"系统错误,无法创建锁文件: {e}")
         return False
     except Exception as e:
-        logger.error(f"错误: {e}", file=sys.stderr)
+        logger.error(f"错误: {e}")
         return False
     try:
         fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)   # 排他锁 + 非阻塞(Non-Blocking)—拿不到就立刻报错，不等
@@ -55,12 +55,12 @@ def _try_lock() -> bool:
         _lock_fd = None
         return False
     except OSError as e:
-        logger.error(f"系统错误,获取文件锁失败: {e}", file=sys.stderr)
+        logger.error(f"系统错误,获取文件锁失败: {e}")
         os.close(_lock_fd)
         _lock_fd = None
         return False 
     except Exception as e:
-        logger.error(f"错误: {e}", file=sys.stderr)
+        logger.error(f"错误: {e}")
         os.close(_lock_fd)
         _lock_fd = None
         return False
@@ -253,7 +253,7 @@ def main():
     RESULT.unlink(missing_ok=True)
 
     if not _try_lock():
-        logger.warning("已有实例在运行", file=sys.stderr)
+        logger.warning("已有实例在运行")
         sys.exit(1)
 
     app = QApplication(sys.argv)
@@ -293,13 +293,5 @@ def main():
     logger.info("Qt 事件循环启动")
     sys.exit(app.exec())
 
-if __name__ == "__main__":
-    logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    handlers=[
-            logging.FileHandler(CFG.debug, encoding="utf-8"),  # 写到文件
-            logging.StreamHandler(sys.stdout)  # 同时输出到终端
-            ]
-    )   
+if __name__ == "__main__": 
     main()

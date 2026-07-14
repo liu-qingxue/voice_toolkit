@@ -100,7 +100,7 @@ def toggle():
             logger.error("结果文件损坏")
             RESULT.unlink(missing_ok=True)
             sys.exit(1)
-        test_head = text[1,21]
+        test_head = text[1:21]
         logger.info(f"转录结束,结果文件的头: {test_head}")
         print(text, end="", flush=True)
 
