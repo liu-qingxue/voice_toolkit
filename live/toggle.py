@@ -18,7 +18,7 @@ if str(ROOT) not in sys.path:
 import log
 from config import CFG
 
-logger=logging.getLogger(__name__)
+logger=logging.getLogger("live/toggle.py")
 
 LOCK = CFG.lock_file
 RESULT = CFG.result_file
@@ -38,7 +38,7 @@ def _daemon_alive() -> bool:
         return False
     except BlockingIOError as e:
         # 拿不到共享锁 → 排他锁被持有 → daemon 活着
-        logger.error(f"拿不到共享锁,排他锁被持有: {e}")
+        logger.info(f"拿不到共享锁,排他锁被持有: {e}")
         os.close(fd)
         return True
 

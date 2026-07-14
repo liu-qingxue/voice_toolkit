@@ -5,9 +5,10 @@ from pathlib import Path
 
 # 硬编码日志文件路径（按需修改）
 LOG_FILE = Path("/tmp/live_transcriber.log")
-
+LOG_FILE.parent.mkdir(parents= True, exist_ok= True)
+# LOG_FILE.unlink(missing_ok=True)
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     handlers=[
         logging.FileHandler(LOG_FILE, encoding="utf-8"),

@@ -3,7 +3,7 @@ import yaml
 import copy
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("config/config.py")
 
 _yaml_path = Path(__file__).resolve().parent / "config.yaml"
 
@@ -13,8 +13,8 @@ class Config:
         "channels": 1,
         "dtype": "int16",
         "segment_seconds": 600,
-        "lock_file": "/tmp/live_transcriber.lock",
-        "result_file": "/tmp/live_transcriber_result.json",
+        "lock_file": "/tmp/transcriber/live_transcriber.lock",
+        "result_file": "/tmp/transcriber/live_transcriber_result.json",
         "models": {
             "paraformer_v1": {
                 "dir": "~/.cache/modelscope/hub/models/iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/",
@@ -131,12 +131,16 @@ class Config:
     def lock_file(self) -> Path :
         """锁文件路径"""
         if isinstance(self.config["lock_file"],str):
-            return Path(self.config["lock_file"])
+            lock_file = Path(self.config["lock_file"])
+            lock_file.parent.mkdir(parents=True, exist_ok=True)
+            return lock_file
         else:return self.default_config["lock_file"]
     @property
     def result_file(self) -> Path :
         """转写结果暂存路径"""
         if isinstance(self.config["result_file"],str):
+            result_file = Path(self.config["result_file"])
+            result_file.parent.mkdir(parents= True, exist_ok= True)
             return Path(self.config["result_file"])
         else:return Path(self.default_config["result_file"])
     @property

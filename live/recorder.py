@@ -6,19 +6,24 @@ from config import CFG
 import sys
 import logging
 
-logger = logging.getLogger(__name__)
+# sound--声音
+logger = logging.getLogger("live/recorder.py")
 class LiveRecorder:
     """录音器。run() 在子线程运行，stop() 在主线程调用取回音频。"""
 
     def __init__(self, max_duration: int | None = None):
         if max_duration is None:
             max_duration = CFG.max_duration or 60   # # 最长录音秒数
-        self.sr = CFG.sample_rate
+        self.sample_rate = CFG.sample_rate
+        self.dtype = CFG.dtype
+        self.cannels = CFG.channels
         self.max_duration = max_duration
-        self._buffer: queue.Queue[np.ndarray] = queue.Queue()
+
         self._running = False
+        self._buffer: queue.Queue[np.ndarray] = queue.Queue()
         self._stream: sd.InputStream | None = None
-        self._start_time: float = 0.0
+
+        self._start_time: float = 0.0   # 记录开始时间,用于录音超时
 
     def run(self):
         """在子线程中运行：启动音频流，不断采集到 buffer"""
@@ -32,20 +37,23 @@ class LiveRecorder:
 
         try:
             self._stream = sd.InputStream(
-                samplerate=self.sr,
-                channels=1,
-                dtype="int16",
+                samplerate=self.sample_rate,
+                channels=self.cannels,
+                dtype=self.dtype,
                 callback=callback,
             )
             self._stream.start()   # 开始录音
+            logger.info("录音开始!")
         except Exception as e:
-            logger.error(f"[recorder] 麦克风启动失败: {e}", file=sys.stderr, flush=True)
+            logger.error(f"麦克风启动失败: {e}")
             self._running = False
             return
 
         while self._running:
             elapsed = time_module.time() - self._start_time
             if elapsed >= self.max_duration:
+                logger.info(f"录音超时,当前阈值为: {self.max_duration}")
+                
                 break
             sd.sleep(100)
 

@@ -4,8 +4,8 @@ channels: 1                 # 声道数
 dtype: int16                # 采样位深
 segment_seconds: 600        # 分片秒数。
 # --- 文件路径 ----------------------------
-lock_file: /tmp/live_transcriber.lock
-result_file: /tmp/live_transcriber_result.json
+lock_file: /tmp/transcriber/live_transcriber.lock
+result_file: /tmp/transcriber/live_transcriber_result.json
 # ─── 模型 ────────────────────────────────
 models:
   paraformer_v1: 
