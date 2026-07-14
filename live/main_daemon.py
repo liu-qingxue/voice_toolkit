@@ -46,11 +46,12 @@ def _try_lock() -> bool:
         logger.error(f"系统错误,无法创建锁文件: {e}")
         return False
     except Exception as e:
-        logger.error(f"错误: {e}")
+        logger.error(f"无法创建锁文件,错误: {e}")
         return False
     try:
         fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)   # 排他锁 + 非阻塞(Non-Blocking)—拿不到就立刻报错，不等
-    except BlockingIOError:
+    except BlockingIOError as e:
+        logger.error(f"排他锁获取失败: {e}")
         os.close(_lock_fd)
         _lock_fd = None
         return False
@@ -67,6 +68,7 @@ def _try_lock() -> bool:
     return True
 
 def _release_lock():
+    """"""
     global _lock_fd
     if _lock_fd is not None:
         fcntl.flock(_lock_fd, fcntl.LOCK_UN)
