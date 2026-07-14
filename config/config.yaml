@@ -6,7 +6,6 @@ segment_seconds: 600        # 分片秒数。
 # --- 文件路径 ----------------------------
 lock_file: /tmp/live_transcriber.lock
 result_file: /tmp/live_transcriber_result.json
-debug: /tmp/live_transcriber_debug.log
 # ─── 模型 ────────────────────────────────
 models:
   paraformer_v1: 

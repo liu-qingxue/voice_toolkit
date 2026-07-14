@@ -4,8 +4,9 @@ import numpy as np
 import sounddevice as sd
 from config import CFG
 import sys
+import logging
 
-
+logger = logging.getLogger(__name__)
 class LiveRecorder:
     """录音器。run() 在子线程运行，stop() 在主线程调用取回音频。"""
 
@@ -38,7 +39,7 @@ class LiveRecorder:
             )
             self._stream.start()   # 开始录音
         except Exception as e:
-            print(f"[recorder] 麦克风启动失败: {e}", file=sys.stderr, flush=True)
+            logger.error(f"[recorder] 麦克风启动失败: {e}", file=sys.stderr, flush=True)
             self._running = False
             return
 
@@ -64,6 +65,7 @@ class LiveRecorder:
                 break
 
         if not chunks:
+            logger.warning("最终的录音结果数组(chunks)为空!")
             return None
 
         audio = np.concatenate(chunks)  # concatenate-连接/串联 ,返回一个大的数组

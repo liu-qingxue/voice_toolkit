@@ -1,6 +1,9 @@
 from pathlib import Path
 import yaml
 import copy
+import logging
+
+logger = logging.getLogger(__name__)
 
 _yaml_path = Path(__file__).resolve().parent / "config.yaml"
 
@@ -12,7 +15,6 @@ class Config:
         "segment_seconds": 600,
         "lock_file": "/tmp/live_transcriber.lock",
         "result_file": "/tmp/live_transcriber_result.json",
-        "debug":"/tmp/live_transcriber_debug.log",
         "models": {
             "paraformer_v1": {
                 "dir": "~/.cache/modelscope/hub/models/iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/",
@@ -90,10 +92,10 @@ class Config:
                     self._deep_merge(self.config, _overrides)
                 return True
             except Exception as e:
-                print(f"Error reloading config: {e}")
+                logger.error(f"Error reloading config: {e}")
                 return False
         else:
-            print(f"热加载失败,{_yaml_path}未找到配置文件")
+            logger.error(f"热加载失败,{_yaml_path}未找到配置文件")
             return False
         
     # ==== 普通一级属性 =============
@@ -138,12 +140,6 @@ class Config:
             return Path(self.config["result_file"])
         else:return Path(self.default_config["result_file"])
     @property
-    def debug(self) -> Path :
-        """debug日志路径"""
-        if isinstance(self.config["debug"],str):
-            return Path(self.config["debug"])
-        else:return Path(self.default_config["debug"])
-    @property
     def ROOT(self) -> Path :
         """项目根目录（通过 config 位置自动定位）"""
         return Path(__file__).resolve().parent.parent
@@ -159,22 +155,32 @@ class Config:
             model=self.config[self.mode]["model"]
             if isinstance(model,str):
                 return self.config[self.mode]["model"]
-            else:raise ValueError(f"model的名称不合法:{model}")
-        else:raise ValueError(f"{self.mode}的models里未配置必要的参数model!")
+            else:
+                logger.warning(f"model的名称不合法:{model}")
+                raise ValueError(f"model的名称不合法:{model}")
+        else:
+            logger.error(f"{self.mode}的models里未配置必要的参数model!")
+            raise ValueError(f"{self.mode}的models里未配置必要的参数model!")
     @property
     def model_dir(self) -> Path :
         """模型的父路径"""
-        model_dir = Path(self.config["models"][self.model]["dir"]).expanduser()
-        if model_dir.exists():
-            return model_dir
-        else:raise FileNotFoundError(f"模型{model_dir}未找到")
+        if "model" in self.config[self.mode]:
+            model_dir = Path(self.config["models"][self.model]["dir"]).expanduser()
+            if model_dir.exists():
+                return model_dir
+            else:
+                logger.error(f"模型{model_dir}未找到")
+                raise FileNotFoundError(f"模型{model_dir}未找到")
+        else:
+            logger.error(f"{self.mode}的models里未配置必要的参数model")
+            raise ValueError(f"{self.mode}的models里未配置必要的参数model!")
     @property
     def model_params(self) -> dict | None :
         """模型的特调参数表,不存在返回None"""
         if "params" in self.config["models"][self.model]:
             return self.config["models"][self.model]["params"]
         else:
-            print(f"请检查当前的{self.mode}工作模式对应{self.model}模型里是否配置了特调参数表,未使用参数")
+            logger.error(f"请检查当前的{self.mode}工作模式对应{self.model}模型里是否配置了特调参数表,未使用参数")
             return None
     @property
     def ncpu(self) -> int | None:
@@ -185,7 +191,7 @@ class Config:
                 if ncpu in range(1,20):
                     return self.config["models"][self.model]["params"]["ncpu"]
                 else:
-                    print(f"当前model{self.model}的ncpu-模型的cpu线程配置内容不合法,当前使用{self.default_config["models"][self.model]["params"]["ncpu"]}")
+                    logger.warning(f"当前model{self.model}的ncpu-模型的cpu线程配置内容不合法,当前使用{self.default_config["models"][self.model]["params"]["ncpu"]}")
                     return self.default_config["models"][self.model]["params"]["ncpu"]
     @property
     def vad_dir(self) -> Path :
@@ -193,14 +199,18 @@ class Config:
         vad_dir = Path(self.config["models"][self.model]["vad_dir"]).expanduser()
         if vad_dir.exists():
             return vad_dir
-        else:raise FileNotFoundError(f"vad模型未找到:{vad_dir}")
+        else:
+            logger.error(f"vad模型未找到:{vad_dir}")
+            raise FileNotFoundError(f"vad模型未找到:{vad_dir}")
     @property
     def punc_dir(self) -> Path :
         """punc(标点)模型的父路径"""
         punc_dir = Path(self.config["models"][self.model]["punc_dir"]).expanduser()
         if punc_dir.exists():
             return punc_dir
-        else:raise FileNotFoundError(f"标点model未找到:{punc_dir}")
+        else:
+            logger.error(f"标点model未找到:{punc_dir}")
+            raise FileNotFoundError(f"标点model未找到:{punc_dir}")
     
     # ==== 均有的工作模式参数 ======================
     @property
@@ -210,7 +220,7 @@ class Config:
         if isinstance(is_stream,bool):
             return self.config[self.mode].get("stream", False)
         else:
-            print(f"配置mode{self.mode}的stream字段未配置或配置错误,使用False")
+            logger.warning(f"配置mode{self.mode}的stream字段未配置或配置错误,使用False")
             return False
     # ==== live工作模式参数 =======================
     @property
@@ -221,7 +231,7 @@ class Config:
             if isinstance(max_duration,int) and max_duration>0:
                 return self.config[self.mode]["max_duration"]
             else:
-                print(f"配置的max_duration{max_duration} 有误,使用了")
+                logger.warning(f"配置的max_duration{max_duration} 有误,使用了")
                 return self.default_config[self.mode]["max_duration"]
         return None
     @property
@@ -232,7 +242,7 @@ class Config:
             if isinstance(idle_timeout_sec,int) and idle_timeout_sec>=0:
                 return self.config[self.mode]["idle_timeout_sec"]
             else:
-                print(f"配置的idle_timeout_sec:{idle_timeout_sec}不合法,使用了默认值:{self.default_config[self.mode]["idle_timeout_sec"]}")
+                logger.warning(f"配置的idle_timeout_sec:{idle_timeout_sec}不合法,使用了默认值:{self.default_config[self.mode]["idle_timeout_sec"]}")
                 return self.default_config[self.mode]["idle_timeout_sec"]
         return None
     # ==== batch工作模式参数 ======================
@@ -243,28 +253,30 @@ class Config:
         if "output_mode" in self.config[self.mode]:
             if self.config[self.mode]["output_mode"] in {"notification","cursor","window"}:
                 return self.config[self.mode]["output_mode"]
-            else:raise ValueError(f"配置的不合法前端形式为: {self.config[self.mode]["output_mode"]}")
+            else:
+                logger.warning(f"配置的不合法前端形式为: {self.config[self.mode]["output_mode"]}")
+                raise ValueError(f"配置的不合法前端形式为: {self.config[self.mode]["output_mode"]}")
         return None
     # ==== 窗口前端参数 =============================
     @property
     def window_popup_copy_delay(self) -> int :
         """窗口复制后停留多少**毫秒**，然后开始淡出"""
         if not self.output_mode == "window":
-            print(f"警告 当前工作模式是{self.output_mode}, 仍然返回参数")
+            logger.warning(f"警告 当前工作模式是{self.output_mode}, 仍然返回参数")
         if "popup_copy_delay" in self.config["window"] and self.config["window"]["popup_copy_delay"]>=0:
             return self.config["window"]["popup_copy_delay"]
         else:
-            print(f"你的window对应的window_popup_copy_delay参数为空或者不合法,返回了200的默认值")
+            logger.warning(f"你的window对应的window_popup_copy_delay参数为空或者不合法,返回了200的默认值")
             return self.default_config["window"]["popup_copy_delay"]
     @property
     def window_popup_fade_ms(self) -> int :
         """窗口淡出动画持续时间--**毫秒**"""
         if not self.output_mode == "window":
-            print(f"警告 当前工作模式是{self.output_mode}, 仍然返回参数")
+            logger.warning(f"警告 当前工作模式是{self.output_mode}, 仍然返回参数")
             return self.config["window"]["popup_fade_ms"]
         if "popup_fade_ms" in self.config["window"] and self.config["window"]["popup_fade_ms"]>=0:
             return self.config["window"]["popup_fade_ms"]
         else:
-            print(f"你的window对应的popup_fade_ms参数为空或者不合法,返回了300的默认值")
+            logger.warning(f"你的window对应的popup_fade_ms参数为空或者不合法,返回了300的默认值")
             return self.default_config["window"]["popup_fade_ms"]
 CFG = Config()

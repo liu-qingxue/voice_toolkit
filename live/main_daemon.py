@@ -10,15 +10,15 @@ import threading
 import logging
 import concurrent.futures
 from pathlib import Path
+from PyQt6.QtCore import Qt, QObject, QTimer, QFileSystemWatcher
+from PyQt6.QtGui import QIcon, QPainter, QPixmap, QAction
+from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 ROOT = Path(__file__).resolve().parent.parent   # 入口处必须要有!!!
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from PyQt6.QtCore import Qt, QObject, QTimer, QFileSystemWatcher
-from PyQt6.QtGui import QIcon, QPainter, QPixmap, QAction
-from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
-
+import log
 from config import CFG
 from core import create_transcriber
 from live.recorder import LiveRecorder
@@ -30,12 +30,8 @@ CMD = CFG.cannel_cmd
 
 IDLE_TIMEOUT = CFG.idle_timeout_sec
 
-
-DEBUG_LOG = CFG.debug
+DEBUG_LOG = log.debug
 logger = logging.getLogger(__name__)
-def _debug(msg: str):
-    with DEBUG_LOG.open("a", encoding="utf-8") as f:
-        f.write(f"[{os.getpid()}] {msg}\n")
 
 _lock_fd: int | None = None
 _transcriber = None
@@ -47,10 +43,10 @@ def _try_lock() -> bool:
     try:
         _lock_fd = os.open(str(LOCK), os.O_CREAT | os.O_RDWR)   # 读写模式+文件不存在时自动创建
     except OSError as e:
-        print(f"系统错误,无法创建锁文件: {e}", file=sys.stderr)
+        logger.error(f"系统错误,无法创建锁文件: {e}", file=sys.stderr)
         return False
     except Exception as e:
-        print(f"错误: {e}", file=sys.stderr)
+        logger.error(f"错误: {e}", file=sys.stderr)
         return False
     try:
         fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)   # 排他锁 + 非阻塞(Non-Blocking)—拿不到就立刻报错，不等
@@ -59,12 +55,12 @@ def _try_lock() -> bool:
         _lock_fd = None
         return False
     except OSError as e:
-        print(f"系统错误,获取文件锁失败: {e}", file=sys.stderr)
+        logger.error(f"系统错误,获取文件锁失败: {e}", file=sys.stderr)
         os.close(_lock_fd)
         _lock_fd = None
         return False 
     except Exception as e:
-        print(f"错误: {e}", file=sys.stderr)
+        logger.error(f"错误: {e}", file=sys.stderr)
         os.close(_lock_fd)
         _lock_fd = None
         return False
@@ -137,7 +133,7 @@ class LiveLoop(QObject):
         except Exception:
             return
 
-        _debug(f"CMD 内容: {cmd!r}")
+        logger.debug(f"CMD 内容: {cmd!r}")
         if cmd == "quit":
             self._on_quit()
         elif cmd == "release":
@@ -162,10 +158,10 @@ class LiveLoop(QObject):
         self._rec_thread.start()
         self._tray.setIcon(self._icon_rec)
         self._tray.setToolTip("录音中")
-        _debug("录音开始")
+        logger.info("录音开始")
 
     def _stop_and_transcribe(self):
-        _debug("录音停止，开始转录")
+        logger.info("录音停止，开始转录")
         audio = self._recorder.stop()
         self._rec_thread.join(timeout=5)
         self._recorder = None
@@ -194,7 +190,7 @@ class LiveLoop(QObject):
         try:
             text = self._transcribe_future.result()
         except Exception as e:
-            _debug(f"转录异常: {e}")
+            logger.error(f"转录异常: {e}")
             self._tray.showMessage("转录失败", str(e),
                                    QSystemTrayIcon.MessageIcon.Critical, 5000)
         self._transcribe_future = None
@@ -217,7 +213,7 @@ class LiveLoop(QObject):
     def _back_to_idle(self):
         self._tray.setIcon(self._icon_idle)
         self._tray.setToolTip("待机")
-        _debug("回到待机")
+        logger.info("回到待机")
 
     # ── 模型管理 ──────────────────────────
     def _release_engine(self):
@@ -230,7 +226,7 @@ class LiveLoop(QObject):
             _transcriber = None
         self._idle.stop()
         self._back_to_idle()
-        _debug("模型已释放")
+        logger.info("模型已释放")
 
 
     def _on_idle(self):
@@ -252,11 +248,12 @@ class LiveLoop(QObject):
 
 # ── 入口 ──────────────────────────────────
 def main():
-    _debug("=== 守护进程启动 ===")
+    logger.info("=== 守护进程启动 ===")
+
     RESULT.unlink(missing_ok=True)
 
     if not _try_lock():
-        print("已有实例在运行", file=sys.stderr)
+        logger.warning("已有实例在运行", file=sys.stderr)
         sys.exit(1)
 
     app = QApplication(sys.argv)
@@ -293,8 +290,16 @@ def main():
 
     act_quit.triggered.connect(loop._on_quit)
 
-    _debug("Qt 事件循环启动")
+    logger.info("Qt 事件循环启动")
     sys.exit(app.exec())
 
 if __name__ == "__main__":
+    logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    handlers=[
+            logging.FileHandler(CFG.debug, encoding="utf-8"),  # 写到文件
+            logging.StreamHandler(sys.stdout)  # 同时输出到终端
+            ]
+    )   
     main()
