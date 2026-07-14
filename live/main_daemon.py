@@ -28,7 +28,8 @@ LOCK = CFG.lock_file
 RESULT = CFG.result_file
 CMD = CFG.cannel_cmd
 
-IDLE_TIMEOUT = CFG.idle_timeout_sec or 3600
+IDLE_TIMEOUT = CFG.idle_timeout_sec
+
 
 DEBUG_LOG = CFG.debug
 logger = logging.getLogger(__name__)
@@ -104,21 +105,27 @@ class LiveLoop(QObject):
 
         CMD.unlink(missing_ok=True)
 
-        # ── 文件变更监控 ──
+        # 1==> 文件变更监控 
         self._fs_watcher = QFileSystemWatcher(self)   # QObject 子类在创建时都可以接受一个 parent 参数 ,负责它的生命周期
         self._fs_watcher.directoryChanged.connect(self._on_cmd_dir_changed)  # Watcher-观察者
         self._fs_watcher.addPath(str(CMD.parent))
 
-        # ── 转录结果轮询 (保持低开销，转录完成后立即 dispatch) ──
+        # 2==> 转录结果轮询 (保持低开销，转录完成后立即 dispatch) ──
         self._transcribe_poll = QTimer(self)   # poll-轮询
         self._transcribe_poll.timeout.connect(self._poll_transcribe)
-        self._transcribe_poll.start(100)   # 按设定的时间间隔，定期发射 timeout 信号
+        self._transcribe_poll.start(100)   # 按设定的时间间隔，定期发射 timeout 信号,这里的Qtimer是一个定时器,timeout不是超时!
 
         # ── 空闲卸载计时器 ──
-        self._idle = QTimer(self)
-        self._idle.setSingleShot(True)
+        self._idle = QTimer(self)   # idle-空闲(ideal-理想/理想的)
+        self._idle.setSingleShot(True)   # 单次触发,single-单次;shot-开一次枪
         self._idle.timeout.connect(self._on_idle)
+
         self._reset_idle()
+
+    def _reset_idle(self):
+        self._idle.stop()
+        if IDLE_TIMEOUT > 0:
+            self._idle.start(IDLE_TIMEOUT * 1000)
 
     def _on_cmd_dir_changed(self, path: str):
         """CMD 文件所在的目录有变动时触发"""
@@ -225,10 +232,6 @@ class LiveLoop(QObject):
         self._back_to_idle()
         _debug("模型已释放")
 
-    def _reset_idle(self):
-        self._idle.stop()
-        if IDLE_TIMEOUT > 0:
-            self._idle.start(IDLE_TIMEOUT * 1000)
 
     def _on_idle(self):
         self._release_engine()

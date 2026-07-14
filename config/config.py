@@ -47,7 +47,9 @@ class Config:
     def __init__(self,mode:str="live"):
         self.config = copy.deepcopy(self.default_config)
         self.load()
-        self.mode= mode
+        if mode in {"live","batch"}:
+            self.mode= mode
+        else:self.mode = "live"
     
     def load(self):
         if _yaml_path.exists():
@@ -98,32 +100,49 @@ class Config:
     @property
     def sample_rate(self) -> int :
         """采样率"""
-        return self.config["sample_rate"]
+        valid={8000, 11025, 16000, 22050, 32000, 44100, 48000, 96000, 192000}
+        if self.config["sample_rate"] in valid:
+            return self.config["sample_rate"]
+        else:return self.default_config["sample_rate"]
     @property
     def channels(self) -> int :
         """声道数"""
-        return self.config["channels"]
+        valid={1, 2, 6, 8}
+        if self.config["channels"] in valid:
+            return self.config["channels"]
+        else:return self.default_config["channels"]
     @property
     def dtype(self) -> str :
         """采样位深"""
-        return self.config["dtype"]
+        valid={"int16", "int24", "int32", "float32", "float64"}
+        if self.config["dtype"] in valid:
+            return self.config["dtype"]
+        else:return self.default_config["dtype"]
     @property
     def segment_seconds(self) -> int :
         """分片秒数"""
-        return self.config["segment_seconds"]
+        if type(self.config["segment_seconds"])==int and self.config["segment_seconds"]>0:
+            return self.config["segment_seconds"]
+        else:return self.default_config["segment_seconds"]
     
     @property
     def lock_file(self) -> Path :
         """锁文件路径"""
-        return Path(self.config["lock_file"])
+        if isinstance(self.config["lock_file"],str):
+            return Path(self.config["lock_file"])
+        else:return self.default_config["lock_file"]
     @property
     def result_file(self) -> Path :
         """转写结果暂存路径"""
-        return Path(self.config["result_file"])
+        if isinstance(self.config["result_file"],str):
+            return Path(self.config["result_file"])
+        else:return Path(self.default_config["result_file"])
     @property
     def debug(self) -> Path :
         """debug日志路径"""
-        return Path(self.config["debug"])
+        if isinstance(self.config["debug"],str):
+            return Path(self.config["debug"])
+        else:return Path(self.default_config["debug"])
     @property
     def ROOT(self) -> Path :
         """项目根目录（通过 config 位置自动定位）"""
@@ -136,41 +155,85 @@ class Config:
     @property
     def model(self) -> str :
         """模型名称"""
-        return self.config[self.mode]["model"]
+        if "model" in self.config[self.mode]:
+            model=self.config[self.mode]["model"]
+            if isinstance(model,str):
+                return self.config[self.mode]["model"]
+            else:raise ValueError(f"model的名称不合法:{model}")
+        else:raise ValueError(f"{self.mode}的models里未配置必要的参数model!")
     @property
     def model_dir(self) -> Path :
         """模型的父路径"""
-        return Path(self.config["models"][self.model]["dir"]).expanduser()
+        model_dir = Path(self.config["models"][self.model]["dir"]).expanduser()
+        if model_dir.exists():
+            return model_dir
+        else:raise FileNotFoundError(f"模型{model_dir}未找到")
     @property
-    def ncpu(self) -> int :
-        """模型的cpu线程"""
-        return self.config["models"][self.model]["params"]["ncpu"]
+    def model_params(self) -> dict | None :
+        """模型的特调参数表,不存在返回None"""
+        if "params" in self.config["models"][self.model]:
+            return self.config["models"][self.model]["params"]
+        else:
+            print(f"请检查当前的{self.mode}工作模式对应{self.model}模型里是否配置了特调参数表,未使用参数")
+            return None
+    @property
+    def ncpu(self) -> int | None:
+        """模型的cpu线程,如果上级参数表不存在或者,本参数不存在都返回None"""
+        if self.model_params:
+            if "ncpu" in self.model_params:
+                ncpu = self.model_params["ncpu"]
+                if ncpu in range(1,20):
+                    return self.config["models"][self.model]["params"]["ncpu"]
+                else:
+                    print(f"当前model{self.model}的ncpu-模型的cpu线程配置内容不合法,当前使用{self.default_config["models"][self.model]["params"]["ncpu"]}")
+                    return self.default_config["models"][self.model]["params"]["ncpu"]
     @property
     def vad_dir(self) -> Path :
         """vad模型的父路径"""
-        return Path(self.config["models"][self.model]["vad_dir"]).expanduser()
+        vad_dir = Path(self.config["models"][self.model]["vad_dir"]).expanduser()
+        if vad_dir.exists():
+            return vad_dir
+        else:raise FileNotFoundError(f"vad模型未找到:{vad_dir}")
     @property
     def punc_dir(self) -> Path :
         """punc(标点)模型的父路径"""
-        return Path(self.config["models"][self.model]["punc_dir"]).expanduser()
+        punc_dir = Path(self.config["models"][self.model]["punc_dir"]).expanduser()
+        if punc_dir.exists():
+            return punc_dir
+        else:raise FileNotFoundError(f"标点model未找到:{punc_dir}")
     
     # ==== 均有的工作模式参数 ======================
     @property
     def is_stream(self) -> bool:
         """是否流式输出（根据当前模式读取 live/batch 下的 stream 字段）"""
-        return self.config[self.mode].get("stream", False)
+        is_stream = self.config[self.mode].get("stream", False)
+        if isinstance(is_stream,bool):
+            return self.config[self.mode].get("stream", False)
+        else:
+            print(f"配置mode{self.mode}的stream字段未配置或配置错误,使用False")
+            return False
     # ==== live工作模式参数 =======================
     @property
     def max_duration(self) -> int | None:
         """live的最长录音秒数,非live返回None"""
         if "max_duration" in self.config[self.mode]:
-            return self.config[self.mode]["max_duration"]
+            max_duration = self.config[self.mode]["max_duration"]
+            if isinstance(max_duration,int) and max_duration>0:
+                return self.config[self.mode]["max_duration"]
+            else:
+                print(f"配置的max_duration{max_duration} 有误,使用了")
+                return self.default_config[self.mode]["max_duration"]
         return None
     @property
     def idle_timeout_sec(self) -> int | None :
         """live的空闲模型释放秒数(0=禁用）,非live返回None"""
         if "idle_timeout_sec" in self.config[self.mode]:
-            return self.config[self.mode]["idle_timeout_sec"]
+            idle_timeout_sec = self.config[self.mode]["idle_timeout_sec"]
+            if isinstance(idle_timeout_sec,int) and idle_timeout_sec>=0:
+                return self.config[self.mode]["idle_timeout_sec"]
+            else:
+                print(f"配置的idle_timeout_sec:{idle_timeout_sec}不合法,使用了默认值:{self.default_config[self.mode]["idle_timeout_sec"]}")
+                return self.default_config[self.mode]["idle_timeout_sec"]
         return None
     # ==== batch工作模式参数 ======================
     # ==== 前端类型 ===============================
@@ -178,7 +241,9 @@ class Config:
     def output_mode(self) -> str | None :
         """输出方式: notification | cursor | window | None(无)"""
         if "output_mode" in self.config[self.mode]:
-            return self.config[self.mode]["output_mode"]
+            if self.config[self.mode]["output_mode"] in {"notification","cursor","window"}:
+                return self.config[self.mode]["output_mode"]
+            else:raise ValueError(f"配置的不合法前端形式为: {self.config[self.mode]["output_mode"]}")
         return None
     # ==== 窗口前端参数 =============================
     @property
@@ -186,13 +251,20 @@ class Config:
         """窗口复制后停留多少**毫秒**，然后开始淡出"""
         if not self.output_mode == "window":
             print(f"警告 当前工作模式是{self.output_mode}, 仍然返回参数")
-        return self.config["window"]["popup_copy_delay"]
-
+        if "popup_copy_delay" in self.config["window"] and self.config["window"]["popup_copy_delay"]>=0:
+            return self.config["window"]["popup_copy_delay"]
+        else:
+            print(f"你的window对应的window_popup_copy_delay参数为空或者不合法,返回了200的默认值")
+            return self.default_config["window"]["popup_copy_delay"]
     @property
     def window_popup_fade_ms(self) -> int :
         """窗口淡出动画持续时间--**毫秒**"""
         if not self.output_mode == "window":
             print(f"警告 当前工作模式是{self.output_mode}, 仍然返回参数")
-        return self.config["window"]["popup_fade_ms"]
-
+            return self.config["window"]["popup_fade_ms"]
+        if "popup_fade_ms" in self.config["window"] and self.config["window"]["popup_fade_ms"]>=0:
+            return self.config["window"]["popup_fade_ms"]
+        else:
+            print(f"你的window对应的popup_fade_ms参数为空或者不合法,返回了300的默认值")
+            return self.default_config["window"]["popup_fade_ms"]
 CFG = Config()
