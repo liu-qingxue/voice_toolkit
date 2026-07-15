@@ -14,8 +14,8 @@ os.environ.setdefault("MODELSCOPE_DISABLE_NETWORK", "1") # .setdefault(key, valu
 
 class ParaformerTranscriber(TranscribeBase):
     """ # SeACo-Paraformer模型引擎
-    
-    
+    - 在使用 transcribe 时有逻辑保证模型加载
+    - 依赖上游的函数传递mode!
     SeACo-Paraformer2 — 实时转录用。
     最优配置: ncpu=2, 纯净 CER=7.68%, RTF=0.187x
     """
@@ -53,7 +53,14 @@ class ParaformerTranscriber(TranscribeBase):
             punc_model=self.punc_dir,
             punc_model_revision="v2.0.4",
         )
-        self._model = AutoModel(**kwargs)
+        try:
+            self._model = AutoModel(**kwargs)
+            logger.info("model加载成功")
+        except Exception as e:
+            raise(f"未知错误: {e}使得模型加载失败!!")
+
+    def unload(self):
+        self._model = None
 
     def transcribe(self, audio: np.ndarray | Path | str,sample_rate: int = 16000) -> str:
         """### audio无论是路径还是数组都可返回 *转录*后的,*处理*好的str
@@ -101,5 +108,3 @@ class ParaformerTranscriber(TranscribeBase):
             return result.get("text", "").strip()
         return str(result).strip()
 
-    def unload(self):
-        self._model = None
