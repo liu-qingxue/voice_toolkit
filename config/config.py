@@ -1,3 +1,7 @@
+""" # 配置查看器
+- 直接以类属性访问各个配置参数
+- 配置不得修改
+"""
 from pathlib import Path
 import yaml
 import copy
@@ -7,7 +11,7 @@ logger = logging.getLogger("config/config.py")
 
 _yaml_path = Path(__file__).resolve().parent / "config.yaml"
 
-class Config:
+class Config:      
     default_config = {
         "sample_rate": 16000,
         "channels": 1,
@@ -45,8 +49,11 @@ class Config:
             "popup_fade_ms": 300,
         }
     }
-    
     def __init__(self,mode:str="live"):
+        """ # 配置查看器
+        - 直接以类属性访问各个配置参数
+        - 配置不得修改
+        """
         self.config = copy.deepcopy(self.default_config)
         self.load()
         if mode in {"live","batch"}:

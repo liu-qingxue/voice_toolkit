@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from config import CFG
 
-SAMPLE_RATE = CFG.sample_rate
+SAMPLE_RATE = CFG.sample_rate   # 通用参数,使用默认配置
 
 
 def load_wav(path: str | Path) -> tuple[np.ndarray, int]:

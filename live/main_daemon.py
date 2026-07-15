@@ -22,6 +22,7 @@ import log
 from config import CFG
 from core import create_transcriber
 from live.recorder import LiveRecorder
+from live.popup import TranscriptionPopup
 from live.dispatcher import dispatch
 
 LOCK = CFG.lock_file
@@ -36,7 +37,7 @@ logger.warning("测试一下这个logger的名称")
 
 _lock_fd: int | None = None
 _transcriber = None
-_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)   # concurrent-并发,executor-执行者
 
 def _try_lock() -> bool:
     """获取排他锁, 成功返回True,已有实例则返回 False"""
@@ -124,10 +125,6 @@ class LiveLoop(QObject):
 
         self._idle.start(IDLE_TIMEOUT * 1000)   # 将 ms 转化为 s
 
-    def _reset_idle(self):
-        self._idle.stop()
-        self._idle.start(IDLE_TIMEOUT * 1000)   # 将 ms 转化为 s
-
     # ===== cmd三个命令 ============
     def _on_cmd_dir_changed(self, path: str):
         """CMD 文件所在的目录有变动时触发"""
@@ -149,6 +146,15 @@ class LiveLoop(QObject):
             self._toggle()
 
     def _on_quit(self):
+        """ # 退出
+        - 如果在录音,直接丢弃
+        - 然后:
+            - 卸载模型
+            - 停止转录结果轮询(_transcribe_poll)
+            - 删除通信文件, 结果暂存文件
+            - 解锁
+            - 通知Qt关闭
+        """
         if self._recorder is not None:
             discarded_audio = self._recorder.stop()  # 1. 拿出来
             if discarded_audio is not None and len(discarded_audio) > 0:
@@ -158,13 +164,17 @@ class LiveLoop(QObject):
                 self._rec_thread.join(timeout=3)   # 等待这个线程的退出最多等三秒。  
         self._release_engine()
         self._transcribe_poll.stop()
-        self._idle.stop()
         CMD.unlink(missing_ok=True)
         RESULT.unlink(missing_ok=True)
         _release_lock()
         QApplication.quit()
 
     def _release_engine(self):
+        """ # 卸载模型
+        - 卸载模型
+        - 停止_idle的计时
+        - 更新托盘为idle状态
+        """
         global _transcriber
         if _transcriber is not None:
             try:
@@ -173,23 +183,28 @@ class LiveLoop(QObject):
                 logger.error(f"model卸载失败; {e}")
             _transcriber = None
         self._idle.stop()
-        self._tray_idle()
+        self._tray_updata(1)
         logger.info("模型已释放")
 
     def _toggle(self):
+        """ # 响应快捷信号
+        - 正在转录,返回空
+            - 没在录音,开始录音
+            - 在录音,  开始转录
+        """
         if self._transcribing:
             self._tray.showMessage("提示", "正在转录中，请稍候", QSystemTrayIcon.MessageIcon.Information, 5000)
             return
         if self._recorder is None:
             # 开始录音
+            self._idle.stop
             self._recorder = LiveRecorder()
             # daemon--当前进程结束的时候，这个进程将作为连带进程跟着被结束。
             self._rec_thread = threading.Thread(target=self._recorder.run, daemon=True)
             self._rec_thread.start()
 
             # 录音已开始,更新ui
-            self._tray.setIcon(self._icon_rec)   # 图标
-            self._tray.setToolTip("录音中")   # 悬停内容
+            self._tray_updata(2)
             logger.info("录音开始")
         else:
             logger.info("录音停止，开始转录")
@@ -198,58 +213,77 @@ class LiveLoop(QObject):
             self._recorder = None
             self._rec_thread = None
 
+            # 直接返回空,更新托盘为空闲状态,并跳过转录
             if audio is None or len(audio) == 0:
-                # 直接返回空闲状态,并跳过转录
-                self._tray_idle()
+                self._tray_updata(1)
                 return
 
+            # 开始转录
             global _transcriber
             self._transcribing = True
-            self._tray.setIcon(self._icon_loaded)
-            self._tray.setToolTip("转录中")
-
             if _transcriber is None:
-                _transcriber = create_transcriber()
+                _transcriber = create_transcriber(mode= "live")
             self._transcribe_future = _executor.submit(_transcriber.transcribe, audio)
 
+            self._tray_updata(3) # 更新托盘为转录状态
+
+    # ===== 转录轮询 ========
     def _poll_transcribe(self):
-        """检查异步转录是否完成（在主线程中执行 dispatch）"""
+        """ # 轮询转录是否完成,完成就
+        - 检查future队列为空?--为空直接返回空
+        - 检查future是否完成---未完成返回为空
+            - future已经完成!
+            - result获取结果
+        检查异步转录是否完成（在主线程中执行 dispatch）"""
         if self._transcribe_future is None:
             return
         if not self._transcribe_future.done():
+            # Future 对象的done属性boll==>完成与否
             return
         text = ""
         try:
+            # result() 会阻塞当前线程，直到后台任务完成，然后返回任务的返回值。
             text = self._transcribe_future.result()
         except Exception as e:
             logger.error(f"转录异常: {e}")
-            self._tray.showMessage("转录失败", str(e),
-                                   QSystemTrayIcon.MessageIcon.Critical, 5000)
-        self._transcribe_future = None
-        self._transcribing = False
+            self._tray.showMessage("转录失败", str(e), QSystemTrayIcon.MessageIcon.Critical, 5000)
+        self._transcribe_future = None   # 清空队列
+        self._transcribing = False   # 转录结束了!!
+
+        # 空闲卸载器==>开始计时
+        self._idle.stop
+        self._idle.start(IDLE_TIMEOUT * 1000)   # 将 ms 转化为 s
 
         dispatch(text,
                  notify=self._show_notification,
                  show_window=self._show_window)
-        self._reset_idle()
-        self._tray_idle()
+        
+        self._tray_updata(1)
 
+    # ===== 前端 ============
     def _show_notification(self, preview: str):
-        self._tray.showMessage("转录结果", preview,
-                               QSystemTrayIcon.MessageIcon.Information, 5000)
+        self._tray.showMessage("转录结果", preview, QSystemTrayIcon.MessageIcon.Information, 5000)
 
     def _show_window(self, text: str):
-        from live.popup import TranscriptionPopup
         TranscriptionPopup(text)
-
-    def _tray_idle(self):
+    # ===== 托盘 ===========
+    def _tray_updata(self,mode: int):
         """更新托盘
-        - 将托盘转化为灰色
-        - 将悬停提示变为'待机'"""
-        self._tray.setIcon(self._icon_idle)
-        self._tray.setToolTip("待机")
-        logger.info("托盘回到待机")
-
+        - mode=[1,2,3]==>[待机,正在录音,正在转录]
+        - 将托盘变色
+        - 将悬停提示变化"""
+        if mode==1:
+            self._tray.setIcon(self._icon_idle)
+            self._tray.setToolTip("待机")
+        elif mode==2:
+            self._tray.setIcon(self._icon_rec)
+            self._tray.setToolTip("正在录音")
+        elif mode==3:
+            self._tray.setIcon(self._icon_loaded)
+            self._tray.setToolTip("正在转录")
+        else: 
+            logger.error(f"托盘调用异常")
+ 
 # ── 入口 ──────────────────────────────────
 def main():
     logger.info("=== 守护进程启动 ===")
@@ -278,13 +312,14 @@ def main():
     tray.show()
 
     loop = LiveLoop(tray)
+    act_quit.triggered.connect(loop._on_quit)
 
     def update_menu():
         if loop._recorder is not None:
             act_status.setText("状态: 录音中")
         elif loop._transcribing:
             act_status.setText("状态: 转录中")
-        elif _transcriber is not None and hasattr(_transcriber, 'is_loaded') and _transcriber.is_loaded:
+        elif _transcriber is not None :
             act_status.setText("状态: 模型已加载")
         else:
             act_status.setText("状态: 待机")
@@ -293,10 +328,10 @@ def main():
     menu_timer.timeout.connect(update_menu)
     menu_timer.start(500)
 
-    act_quit.triggered.connect(loop._on_quit)
 
     logger.info("Qt 事件循环启动")
-    sys.exit(app.exec())
+    # app.exec()--启动 Qt 的主事件循环这个方法会阻塞在这里，关闭的时候会返回一个退出码,把它交给sys.exit()
+    sys.exit(app.exec())   
 
 if __name__ == "__main__": 
     main()

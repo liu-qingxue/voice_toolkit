@@ -1,22 +1,26 @@
 import logging
 import os
 import numpy as np
-from config import CFG
+from config import Config
 from core.transcribe_base import TranscribeBase
 from pathlib import Path
 from funasr import AutoModel
 from core.audio import load_wav
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("core/models.py")
 
 os.environ.setdefault("MODELSCOPE_DISABLE_NETWORK", "1") # .setdefault(key, value)	只在 key 不存在 时才设值（已存在则跳过）
 
 class ParaformerTranscriber(TranscribeBase):
-    """SeACo-Paraformer — 实时转录用。
+    """ # SeACo-Paraformer模型引擎
+    
+    
+    SeACo-Paraformer2 — 实时转录用。
     最优配置: ncpu=2, 纯净 CER=7.68%, RTF=0.187x
     """
-    def __init__(self):
+    def __init__(self,mode: str= "live"):
+        CFG = Config(mode)
         self.ncpu = CFG.ncpu
         self.model_dir = CFG.model_dir
         self.vad_dir = CFG.vad_dir
