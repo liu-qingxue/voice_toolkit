@@ -197,7 +197,7 @@ class LiveLoop(QObject):
             return
         if self._recorder is None:
             # 开始录音
-            self._idle.stop
+            self._idle.stop()
             self._recorder = LiveRecorder()
             # daemon--当前进程结束的时候，这个进程将作为连带进程跟着被结束。
             self._rec_thread = threading.Thread(target=self._recorder.run, daemon=True)
@@ -251,7 +251,7 @@ class LiveLoop(QObject):
         self._transcribing = False   # 转录结束了!!
 
         # 空闲卸载器==>开始计时
-        self._idle.stop
+        self._idle.stop()
         self._idle.start(IDLE_TIMEOUT * 1000)   # 将 ms 转化为 s
 
         dispatch(text,

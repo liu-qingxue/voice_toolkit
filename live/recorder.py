@@ -16,7 +16,7 @@ class LiveRecorder:
             max_duration = CFG.max_duration or 60   # # 最长录音秒数
         self.sample_rate = CFG.sample_rate
         self.dtype = CFG.dtype
-        self.cannels = CFG.channels
+        self.channels = CFG.channels
         self.max_duration = max_duration
 
         self._running = False
@@ -38,7 +38,7 @@ class LiveRecorder:
         try:
             self._stream = sd.InputStream(
                 samplerate=self.sample_rate,
-                channels=self.cannels,
+                channels=self.channels,
                 dtype=self.dtype,
                 callback=callback,
             )
