@@ -22,8 +22,8 @@ import log
 from config import CFG
 from core import create_transcriber
 from live.recorder import LiveRecorder
-from live.popup import TranscriptionPopup
-from live.dispatcher import dispatch
+from frontend.window import TranscriptionPopup
+from frontend.dispatcher import dispatch
 
 LOCK = CFG.lock_file
 RESULT = CFG.result_file

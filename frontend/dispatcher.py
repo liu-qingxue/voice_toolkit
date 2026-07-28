@@ -1,10 +1,11 @@
 import json
 import logging
-import time
 from pathlib import Path
 from config import CFG
+from frontend import fcitx5
 
-logger = logging.getLogger("live/dispatcher.py")
+logger = logging.getLogger("frontend/dispatcher.py")
+
 
 def dispatch(text: str, *, notify=None, show_window=None):
     logger.info(f"dispatch 被调用, text长度={len(text)}, mode={CFG.output_mode}")
@@ -15,12 +16,9 @@ def dispatch(text: str, *, notify=None, show_window=None):
         return
 
     mode = CFG.output_mode
-    if mode == "notification" and notify:
-        preview = text[:60].replace("\n", " ")
-        notify(preview)
+    if mode == "notification":
+        pass
     elif mode == "window" and show_window:
         show_window(text)
     elif mode in ("cursor", "fcitx5"):
-        Path("/tmp/voxtype").mkdir(parents=True, exist_ok=True)
-        Path("/tmp/voxtype/result").write_text(text, encoding="utf-8")
-        Path("/tmp/voxtype/commit").write_text(str(time.time()), encoding="utf-8")
+        fcitx5.output(text)
