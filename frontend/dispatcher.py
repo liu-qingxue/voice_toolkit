@@ -2,7 +2,7 @@ import json
 import logging
 from pathlib import Path
 from config import CFG
-from frontend import fcitx5
+from frontend import fcitx5, notification
 
 logger = logging.getLogger("frontend/dispatcher.py")
 
@@ -17,7 +17,7 @@ def dispatch(text: str, *, notify=None, show_window=None):
 
     mode = CFG.output_mode
     if mode == "notification":
-        pass
+        notification.output(text)
     elif mode == "window" and show_window:
         show_window(text)
     elif mode in ("cursor", "fcitx5"):
