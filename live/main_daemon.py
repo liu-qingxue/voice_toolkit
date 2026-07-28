@@ -10,7 +10,7 @@ import threading
 import logging
 import concurrent.futures
 from pathlib import Path
-from PyQt6.QtCore import Qt, QObject, QTimer, QFileSystemWatcher
+from PyQt6.QtCore import Qt, QObject, QTimer, QFileSystemWatcher, QSocketNotifier
 from PyQt6.QtGui import QIcon, QPainter, QPixmap, QAction
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -117,6 +117,24 @@ class LiveLoop(QObject):
         self._transcribe_poll = QTimer(self)   # poll-轮询
         self._transcribe_poll.timeout.connect(self._poll_transcribe)
         self._transcribe_poll.start(100)   # 按设定的时间间隔，定期发射 timeout 信号,这里的Qtimer是一个定时器,timeout不是超时!
+
+        # ── 配置热加载（inotify 事件驱动）──
+        import ctypes
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        self._inotify_fd = libc.inotify_init()
+        if self._inotify_fd < 0:
+            logger.error("inotify_init 失败")
+        else:
+            wd = libc.inotify_add_watch(
+                self._inotify_fd,
+                str(CFG.config_dir).encode(),
+                0x02 | 0x100)  # IN_CLOSE_WRITE | IN_CREATE
+            if wd < 0:
+                logger.error("inotify_add_watch 失败")
+            else:
+                self._inotify_notifier = QSocketNotifier(
+                    self._inotify_fd, QSocketNotifier.Type.Read)
+                self._inotify_notifier.activated.connect(self._on_inotify_ready)
 
         # ── 空闲卸载计时器 ──
         self._idle = QTimer(self)   # idle-空闲(ideal-理想/理想的)
@@ -226,6 +244,12 @@ class LiveLoop(QObject):
             self._transcribe_future = _executor.submit(_transcriber.transcribe, audio)
 
             self._tray_update(3) # 更新托盘为转录状态
+
+    # ===== 配置热加载 ============
+    def _on_inotify_ready(self, fd):
+        os.read(fd, 4096)
+        if CFG.reload():
+            logger.info(f"配置热加载: output_mode={CFG.output_mode}")
 
     # ===== 转录轮询 ========
     def _poll_transcribe(self):

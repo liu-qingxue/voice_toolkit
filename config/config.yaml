@@ -1,3 +1,4 @@
+# 这个文件只做参考，具体文件请写入到 /home/liuqingxue/.config/voice_toolkit/config.yaml
 # ─── 录音参数 ────────────────────────────
 sample_rate: 16000          # 录音采样率(hz)
 channels: 1                 # 声道数
@@ -23,11 +24,11 @@ models:
 # ─── 工作模式设定与当前工作模式 ────────────────────────────
 live:
   model: paraformer_v1
-  max_duration: 6000          # 最长录音秒数
+  max_duration: 6000         # 最长录音秒数
   idle_timeout_sec: 3600     # 空闲模型释放秒数(0=禁用）
-  output_mode: cursor   # 输出方式: notification | cursor(fcitx5) | window
+  output_mode: cursor        # 输出方式: notification | cursor(fcitx5) | window
   stream: false
-  device: auto                # auto/cuda/cpu, auto 自动检测 GPU
+  device: auto               # auto/cuda/cpu, auto 自动检测 GPU
 batch:
   model: paraformer_v2
   stream: false

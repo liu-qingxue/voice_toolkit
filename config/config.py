@@ -9,7 +9,9 @@ import logging
 
 logger = logging.getLogger("config/config.py")
 
-_yaml_path = Path(__file__).resolve().parent / "config.yaml"
+_xdg_config = Path("~/.config/voice_toolkit").expanduser()
+_yaml_path = _xdg_config / "config.yaml"
+_xdg_config.mkdir(parents=True, exist_ok=True)
 
 class Config:      
     default_config = {
@@ -156,6 +158,10 @@ class Config:
     def ROOT(self) -> Path :
         """项目根目录（通过 config 位置自动定位）"""
         return Path(__file__).resolve().parent.parent
+    @property
+    def config_dir(self) -> Path:
+        """XDG 配置目录 ~/.config/voice_toolkit/"""
+        return _xdg_config
     @property
     def cannel_cmd(self):
         """轻量级进程间通信(IPC)通道,传递命令"""
