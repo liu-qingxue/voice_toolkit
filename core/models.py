@@ -57,7 +57,7 @@ class ParaformerTranscriber(TranscribeBase):
             self._model = AutoModel(**kwargs)
             logger.info("model加载成功")
         except Exception as e:
-            raise RuntimeError(f"未知错误: {e}使得模型加载失败!!")
+            raise RuntimeError(f"模型加载失败: {e}") from e
 
     def unload(self):
         self._model = None

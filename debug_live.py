@@ -58,7 +58,11 @@ def cmd_toggle():
 def cmd_check():
     if LOCK.exists():
         pid = int(LOCK.read_text().strip())
-        alive = os.kill(pid, 0) is None
+        try:
+            os.kill(pid, 0)
+            alive = True
+        except ProcessLookupError:
+            alive = False
         print(f"LOCK 存在, pid={pid}, 存活={alive}")
     else:
         print("LOCK 不存在")
