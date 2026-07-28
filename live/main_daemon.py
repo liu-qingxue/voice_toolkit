@@ -183,7 +183,7 @@ class LiveLoop(QObject):
                 logger.error(f"model卸载失败; {e}")
             _transcriber = None
         self._idle.stop()
-        self._tray_updata(1)
+        self._tray_update(1)
         logger.info("模型已释放")
 
     def _toggle(self):
@@ -204,7 +204,7 @@ class LiveLoop(QObject):
             self._rec_thread.start()
 
             # 录音已开始,更新ui
-            self._tray_updata(2)
+            self._tray_update(2)
             logger.info("录音开始")
         else:
             logger.info("录音停止，开始转录")
@@ -215,7 +215,7 @@ class LiveLoop(QObject):
 
             # 直接返回空,更新托盘为空闲状态,并跳过转录
             if audio is None or len(audio) == 0:
-                self._tray_updata(1)
+                self._tray_update(1)
                 return
 
             # 开始转录
@@ -225,7 +225,7 @@ class LiveLoop(QObject):
                 _transcriber = create_transcriber(mode= "live")
             self._transcribe_future = _executor.submit(_transcriber.transcribe, audio)
 
-            self._tray_updata(3) # 更新托盘为转录状态
+            self._tray_update(3) # 更新托盘为转录状态
 
     # ===== 转录轮询 ========
     def _poll_transcribe(self):
@@ -258,7 +258,7 @@ class LiveLoop(QObject):
                  notify=self._show_notification,
                  show_window=self._show_window)
         
-        self._tray_updata(1)
+        self._tray_update(1)
 
     # ===== 前端 ============
     def _show_notification(self, preview: str):
@@ -267,7 +267,7 @@ class LiveLoop(QObject):
     def _show_window(self, text: str):
         TranscriptionPopup(text)
     # ===== 托盘 ===========
-    def _tray_updata(self,mode: int):
+    def _tray_update(self,mode: int):
         """更新托盘
         - mode=[1,2,3]==>[待机,正在录音,正在转录]
         - 将托盘变色

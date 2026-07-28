@@ -45,7 +45,7 @@ def main():
     else:
         if not Path(args.output).exists():
             print(f"输出目录[{args.output}]不存在!\n使用当前目录:[{Path.cwd}]作为输出目录!")
-            is_mkdir = input(f"你想要创建[{{args.output}}]这个路径来作为输出目录吗? y|n (默认为y): ")
+            is_mkdir = input(f"你想要创建[{args.output}]这个路径来作为输出目录吗? y|n (默认为y): ")
             if is_mkdir.lower() in ("y","yes",""):
                 is_mkdir = True 
             elif is_mkdir.lower() in ("n","no"):
