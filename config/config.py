@@ -38,11 +38,13 @@ class Config:
                 "max_duration": 6000,
                 "idle_timeout_sec": 3600,
                 "output_mode": "window",
-                "stream":True
+                "stream":True,
+                "device": "auto"
                 },
         "batch":{
             "model":"paraformer_v2",
-            "stream":False
+            "stream":False,
+            "device":"auto"
         },
         "window": {
             "popup_copy_delay": 200,
@@ -233,6 +235,16 @@ class Config:
         else:
             logger.warning(f"配置mode{self.mode}的stream字段未配置或配置错误,使用False")
             return False
+    @property
+    def device(self) -> str:
+        """计算设备: auto 则自动检测, 也可手动指定 cuda/cpu"""
+        device = self.config[self.mode].get("device", "auto")
+        if device != "auto":
+            if device in ("cuda", "cpu"):
+                return device
+            logger.warning(f"不支持的 device: {device}，回退自动检测")
+        import torch
+        return "cuda" if torch.cuda.is_available() else "cpu"
     # ==== live工作模式参数 =======================
     @property
     def max_duration(self) -> int | None:
@@ -260,9 +272,9 @@ class Config:
     # ==== 前端类型 ===============================
     @property
     def output_mode(self) -> str | None :
-        """输出方式: notification | cursor | window | None(无)"""
+        """输出方式: notification | cursor | window | fcitx5 | None(无)"""
         if "output_mode" in self.config[self.mode]:
-            if self.config[self.mode]["output_mode"] in {"notification","cursor","window"}:
+            if self.config[self.mode]["output_mode"] in {"notification","cursor","window","fcitx5"}:
                 return self.config[self.mode]["output_mode"]
             else:
                 logger.warning(f"配置的不合法前端形式为: {self.config[self.mode]["output_mode"]}")

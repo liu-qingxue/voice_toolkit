@@ -25,6 +25,7 @@ class ParaformerTranscriber(TranscribeBase):
         self.model_dir = CFG.model_dir
         self.vad_dir = CFG.vad_dir
         self.punc_dir = CFG.punc_dir
+        self.device = CFG.device
         self._model = None
 
     @property
@@ -44,7 +45,7 @@ class ParaformerTranscriber(TranscribeBase):
             model=self.model_dir,
             model_revision="v2.0.4",
             ncpu=self.ncpu,
-            device="cpu",
+            device=self.device,
             disable_pbar=True,  # 无加载进度条
             disable_update=True, # 不更新
             vad_model=self.vad_dir,
@@ -85,11 +86,15 @@ class ParaformerTranscriber(TranscribeBase):
                 return "[模型加载错误]"
             
         # 4. 推理
+        logger.info(f"开始推理, 音频长度: {len(audio)}")
         try:
             result = self._model.generate(input=audio)
-            return self._extract(result)     
+            logger.info(f"推理完成, 原始结果: {type(result)}")
+            text = self._extract(result)
+            logger.info(f"提取文本: {text[:50]!r}")
+            return text
         except TypeError as e:
-            logger.error(f"[V1] 模型参数错误: {e}")
+            logger.error(f"[V1] 模型参数错误: {e}", exc_info=True)
             return "[参数错误]"
         except RuntimeError as e:
             logger.error(f"[V1] 模型推理失败: {e}", exc_info=True)

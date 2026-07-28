@@ -25,11 +25,13 @@ live:
   model: paraformer_v1
   max_duration: 6000          # 最长录音秒数
   idle_timeout_sec: 3600     # 空闲模型释放秒数(0=禁用）
-  output_mode: window         # 输出方式: notification | cursor | window
-  stream: false 
+  output_mode: fcitx5         # 输出方式: notification | cursor(fcitx5) | window
+  stream: false
+  device: auto                # auto/cuda/cpu, auto 自动检测 GPU
 batch:
   model: paraformer_v2
   stream: false
+  device: auto                # auto/cuda/cpu
 # ─── 前端参数 ──────────────────────────────────────────
 window:
   popup_copy_delay: 200       # 复制后停留毫秒，然后开始淡出

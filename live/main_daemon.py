@@ -229,20 +229,13 @@ class LiveLoop(QObject):
 
     # ===== 转录轮询 ========
     def _poll_transcribe(self):
-        """ # 轮询转录是否完成,完成就
-        - 检查future队列为空?--为空直接返回空
-        - 检查future是否完成---未完成返回为空
-            - future已经完成!
-            - result获取结果
-        检查异步转录是否完成（在主线程中执行 dispatch）"""
         if self._transcribe_future is None:
             return
         if not self._transcribe_future.done():
-            # Future 对象的done属性boll==>完成与否
             return
+        logger.info("future 完成，开始取结果")
         text = ""
         try:
-            # result() 会阻塞当前线程，直到后台任务完成，然后返回任务的返回值。
             text = self._transcribe_future.result()
         except Exception as e:
             logger.error(f"转录异常: {e}")
@@ -254,9 +247,12 @@ class LiveLoop(QObject):
         self._idle.stop()
         self._idle.start(IDLE_TIMEOUT * 1000)   # 将 ms 转化为 s
 
-        dispatch(text,
-                 notify=self._show_notification,
-                 show_window=self._show_window)
+        try:
+            dispatch(text,
+                     notify=self._show_notification,
+                     show_window=self._show_window)
+        except Exception as e:
+            logger.error(f"dispatch 异常: {e}", exc_info=True)
         
         self._tray_update(1)
 
