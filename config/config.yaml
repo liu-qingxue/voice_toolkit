@@ -21,6 +21,18 @@ models:
     punc_dir: ~/.cache/modelscope/hub/models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch/
     params: 
       ncpu: 2
+  qwen3_asr:
+    dir: ~/models/qwen3-asr-gguf/
+    params:
+      onnx_provider: CPU      # AMD 上 ONNX Encoder 走 CPU(计算量极小)
+      llm_use_gpu: true       # Decoder 走 llama.cpp Vulkan GPU
+      enable_aligner: false   # 暂不需要时间戳对齐
+      n_ctx: 2048             # 上下文 token 数(每秒音频约 20 token)
+      chunk_size: 40.0        # 每片段秒数
+      memory_num: 1           # 记忆片段数
+      language: Chinese       # 识别语言
+      context: ""              # 上下文增强提示(专业术语场景强烈建议填写)
+      verbose: false          # 引擎详细日志
 # ─── 工作模式设定与当前工作模式 ────────────────────────────
 live:
   model: paraformer_v1

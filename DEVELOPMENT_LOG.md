@@ -180,3 +180,82 @@ voice_toolkit/
 │   └── commitbridge.conf  ← 插件元数据
 └── DEVELOPMENT_LOG.md     ← 本文件
 ```
+
+---
+
+# 2026-08-26 Qwen3-ASR 高精度模型接入
+
+## 背景
+
+paraformer_v1/v2 精度不够(纯净 CER 7.68% / 11.42%),换用 Qwen3-ASR(纯净 CER 0.56%)。
+利用 AMD RX 9060 XT 16GB 显存,走 llama.cpp Vulkan GPU 加速。
+
+## 架构
+
+```
+voice_toolkit (core/models.py QwenTranscriber)
+    │ sys.path 指向
+    ▼
+~/Public/Qwen3-ASR-GGUF/ (独立后端仓库, git 可更新)
+    ├─ qwen_asr_gguf/inference/llama.py  ← ctypes 翻译官(打过补丁, 对齐 llama.cpp b10566)
+    ├─ qwen_asr_gguf/inference/bin/      ← 冻结的 llama.cpp 库(复制非软链, 系统更新不影响)
+    └─ ~/models/qwen3-asr-gguf/          ← 模型(ONNX Encoder int4 ×2 + GGUF Decoder q4_k)
+```
+
+## 混合推理链路
+
+- **ONNX Encoder**(CPU): 音频 → 特征。119s 音频约 1.7s(计算量小, AMD 无 DML/CUDA, 用 CPU 足够)
+- **GGUF Decoder**(Vulkan GPU): 特征 → 文本。预填充 5231 tokens/s, 生成 158 tokens/s
+- 实测 RTF 0.038(119s 音频 4.4s 完成), 比作者 RTX 5050 的 0.052 更快
+
+## 踩坑记录
+
+### 1. llama.py ctypes 结构体与系统 llama.cpp b10566 不匹配
+**现象**: 引擎初始化时 `llama_init_from_model` 返回 NULL。
+**原因**: llama.py 绑定的 llama.cpp 版本略旧, 而系统 b10566 更新:
+- `llama_model_params` 新增 `load_mode`/`load_mtp`, 删除 `use_mmap`/`use_direct_io`/`use_mlock`
+- `llama_context_params` 新增 `n_rs_seq`/`n_outputs_max`/`n_outputs_max_per_seq`/`ctx_type`
+结构体错位 → C 侧读到垃圾参数。
+**解决**: 修改 llama.py 两处结构体定义对齐 b10566(带注释标记)。
+
+### 2. 系统 ggml 新旧架构文件冲突
+**现象**: `pacman -S ggml` 报文件冲突(/usr/lib/libggml.so 被旧 libggml 0.15.1 占用)。
+**原因**: 之前 AUR 装的 whisper.cpp 依赖旧 libggml。
+**解决**: 卸载 whisper.cpp + libggml, 换装官方 ggml/ggml-cpu/ggml-vulkan/llama-cpp(znver4)。
+
+### 3. 上游 duration=0.0 bug
+**现象**: `engine.transcribe(audio_file)` 返回空结果。
+**原因**: 上游 `load_audio` 把 `duration=0` 解释为"读 0 帧"。
+**解决**: 接入层统一走 `engine.asr(audio=np.ndarray)` 数组接口, 绕开文件接口。
+
+### 4. 库冻结策略
+**背景**: 翻译层(llama.py 补丁)与 llama.cpp 版本强耦合, 系统更新可能破坏。
+**解决**: 把 /usr/lib 的 libggml/libggml-base/libllama 复制到
+`qwen_asr_gguf/inference/bin/`(真实文件 + 版本软链), 与系统解耦。
+升级时手动复制新库 + 检查补丁。
+
+## 配置示例
+
+```yaml
+models:
+  qwen3_asr:
+    dir: ~/models/qwen3-asr-gguf/
+    params:
+      onnx_provider: CPU
+      llm_use_gpu: true
+      enable_aligner: false
+      n_ctx: 2048
+      chunk_size: 40.0
+      memory_num: 1
+      language: Chinese
+      context: ""          # 上下文增强提示(专业术语场景强烈建议填写)
+      verbose: false
+```
+
+## 性能对比(本机 9600X + 9060 XT)
+
+| 模型 | 纯净 CER | RTF | 显存 |
+|:---|:---|:---|:---|
+| paraformer_v1 (旧) | 7.68% | 0.19 | CPU |
+| paraformer_v2 (旧) | 11.42% | 0.14 | CPU |
+| **Qwen3-ASR 1.7B (新)** | **0.56%** | **0.04** | ~1.6GB |

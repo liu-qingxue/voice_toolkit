@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import numpy as np
 from config import Config
 from core.transcribe_base import TranscribeBase
@@ -112,4 +113,123 @@ class ParaformerTranscriber(TranscribeBase):
         if isinstance(result, dict):
             return result.get("text", "").strip()
         return str(result).strip()
+
+
+# Qwen3-ASR-GGUF 后端仓库的绝对路径(保持 ~/Public 独立, git 可更新)
+QWEN_BACKEND = Path.home() / "Public" / "Qwen3-ASR-GGUF"
+
+def _ensure_qwen_backend_importable():
+    """把 Qwen3-ASR-GGUF 后端仓库加进 sys.path, 使 qwen_asr_gguf 包可导入"""
+    if str(QWEN_BACKEND) not in sys.path:
+        sys.path.insert(0, str(QWEN_BACKEND))
+
+
+def _resample_to_16k(audio: np.ndarray, sample_rate: int) -> np.ndarray:
+    """把任意采样率音频重采样到 16kHz(Qwen3-ASR 引擎固定 16k)"""
+    if sample_rate == 16000:
+        return audio
+    from scipy.signal import resample_poly
+    g = np.gcd(sample_rate, 16000)
+    up, down = 16000 // g, sample_rate // g
+    return resample_poly(audio, up, down).astype(np.float32)
+
+
+class QwenTranscriber(TranscribeBase):
+    """ # Qwen3-ASR GGUF 引擎
+    - 混合推理: ONNX Encoder(CPU) + llama.cpp GGUF Decoder(Vulkan GPU)
+    - 依赖 ~/Public/Qwen3-ASR-GGUF 独立后端仓库
+    - 精度远超 Paraformer(纯净 CER 0.56% vs 7.68%), RTF 0.04 远超实时
+    """
+    def __init__(self, mode: str = "live", model_name: str | None = None):
+        CFG = Config(mode)
+        # 显式指定模型名(工厂传入), 不依赖当前配置的 model 字段,
+        # 这样测试/多模型切换时 model_dir 永远指向正确的模型目录
+        self.model_name = model_name or CFG.model
+        model_cfg = CFG.config["models"][self.model_name]
+        self.model_dir = Path(model_cfg["dir"]).expanduser()
+        self.params = model_cfg.get("params") or {}
+        self._engine = None
+
+    @property
+    def is_loaded(self) -> bool:
+        return self._engine is not None
+
+    def load(self):
+        """已加载则返回; 创建 QwenASREngine(ONNX Encoder + Vulkan Decoder)"""
+        if self._engine is not None:
+            return
+
+        _ensure_qwen_backend_importable()
+        try:
+            from qwen_asr_gguf.inference import QwenASREngine, ASREngineConfig
+        except ImportError as e:
+            raise RuntimeError(f"Qwen3-ASR-GGUF 后端导入失败(检查 {QWEN_BACKEND}): {e}") from e
+
+        config = ASREngineConfig(
+            model_dir=str(self.model_dir),
+            onnx_provider=self.params.get("onnx_provider", "CPU"),
+            llm_use_gpu=self.params.get("llm_use_gpu", True),
+            encoder_frontend_fn="qwen3_asr_encoder_frontend.int4.onnx",
+            encoder_backend_fn="qwen3_asr_encoder_backend.int4.onnx",
+            llm_fn="qwen3_asr_llm.q4_k.gguf",
+            n_ctx=self.params.get("n_ctx", 2048),
+            chunk_size=self.params.get("chunk_size", 40.0),
+            memory_num=self.params.get("memory_num", 1),
+            enable_aligner=self.params.get("enable_aligner", False),
+            verbose=self.params.get("verbose", False),
+        )
+        try:
+            self._engine = QwenASREngine(config=config)
+            logger.info("Qwen3-ASR 引擎加载成功")
+        except Exception as e:
+            raise RuntimeError(f"Qwen3-ASR 引擎加载失败: {e}") from e
+
+    def unload(self):
+        if self._engine is not None:
+            try:
+                self._engine.shutdown()
+            except Exception as e:
+                logger.error(f"Qwen3-ASR 引擎关闭异常: {e}")
+            self._engine = None
+
+    def transcribe(self, audio: np.ndarray | Path | str, sample_rate: int = 16000) -> str:
+        """### audio 无论是路径还是数组都可返回 *转录*后的,*处理*好的str
+        - Qwen3-ASR 引擎固定 16kHz, 非 16k 输入会自动重采样
+        """
+        # 1. 路径 → 数组
+        if isinstance(audio, (str, Path)):
+            audio, sample_rate = load_wav(audio)
+
+        # 2. 数组预处理
+        if len(audio) == 0:
+            return ""
+        if audio.ndim > 1:
+            audio = audio.squeeze()
+
+        # 3. 保证引擎已加载
+        if self._engine is None:
+            try:
+                self.load()
+            except Exception as e:
+                logger.error(f"[Qwen3-ASR] 模型加载失败: {e}", exc_info=True)
+                return "[模型加载错误]"
+
+        # 4. 重采样到 16k
+        audio = _resample_to_16k(audio, sample_rate)
+
+        # 5. 推理(显式传 context/language, 走 numpy 数组接口避开上游 duration bug)
+        try:
+            result = self._engine.asr(
+                audio=audio,
+                context=self.params.get("context", "") or "",
+                language=self.params.get("language", "Chinese"),
+                chunk_size_sec=self.params.get("chunk_size", 40.0),
+                memory_chunks=self.params.get("memory_num", 1),
+            )
+            text = (result.text or "").strip()
+            logger.info(f"Qwen3-ASR 推理完成, 文本长度: {len(text)}")
+            return text
+        except Exception as e:
+            logger.error(f"[Qwen3-ASR] 推理失败: {e}", exc_info=True)
+            return "[推理失败]"
 

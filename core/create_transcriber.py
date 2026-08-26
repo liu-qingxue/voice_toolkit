@@ -5,7 +5,7 @@
 """
 import logging
 from config import Config
-from core.models import ParaformerTranscriber
+from core.models import ParaformerTranscriber, QwenTranscriber
 
 logger = logging.getLogger("core/create_transcriber.py")
 
@@ -25,6 +25,8 @@ def create_transcriber(mode: str= "live") -> ParaformerTranscriber :
     if transcriber is None:
         if model in ("paraformer_v1", "paraformer_v2"):
             transcriber = ParaformerTranscriber(mode)
+        elif model == "qwen3_asr":
+            transcriber = QwenTranscriber(mode, model_name=model)
         else:
             raise ValueError(f"不支持的模型类型: {model}")
         transcriber_model = model
