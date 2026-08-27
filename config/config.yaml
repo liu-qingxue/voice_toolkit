@@ -31,7 +31,7 @@ models:
       chunk_size: 40.0        # 每片段秒数
       memory_num: 1           # 记忆片段数
       language: Chinese       # 识别语言
-      context: ""              # 上下文增强提示(专业术语场景强烈建议填写)
+      context: "firefighting.txt"   # hotwords 文件名(放 ~/.config/voice_toolkit/hotwords/ 下), 填 0 或留空 = 关闭
       verbose: false          # 引擎详细日志
 # ─── 工作模式设定与当前工作模式 ────────────────────────────
 live:

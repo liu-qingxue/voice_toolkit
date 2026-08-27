@@ -148,6 +148,8 @@ class QwenTranscriber(TranscribeBase):
         model_cfg = CFG.config["models"][self.model_name]
         self.model_dir = Path(model_cfg["dir"]).expanduser()
         self.params = model_cfg.get("params") or {}
+        self.config_dir = CFG.config_dir   # ~/.config/voice_toolkit/ 下放 hotwords
+        self._context: str | None = None   # 缓存, None=未加载
         self._engine = None
 
     @property
@@ -192,6 +194,33 @@ class QwenTranscriber(TranscribeBase):
                 logger.error(f"Qwen3-ASR 引擎关闭异常: {e}")
             self._engine = None
 
+    def _load_context(self) -> str:
+        """从 hotwords 目录读取上下文增强提示
+        - 配置 context 填文件名, 如: context: firefighting.txt
+        - 空/0/false/null 等 falsy 值 = 关闭, 不触发文件 IO
+        - 读取结果缓存, 只读一次
+        """
+        if self._context is not None:
+            return self._context
+
+        ctx = self.params.get("context")
+        if not ctx:   # 空/0/false/None 统一视为关闭
+            self._context = ""
+            return ""
+
+        fp = self.config_dir / "hotwords" / str(ctx).strip()
+        if not fp.exists():
+            logger.warning(f"hotwords 文件不存在: {fp}, 上下文增强已关闭")
+            self._context = ""
+            return ""
+        try:
+            self._context = fp.read_text(encoding="utf-8").strip()
+            logger.info(f"hotwords 已加载: {fp} ({len(self._context)} 字)")
+        except Exception as e:
+            logger.error(f"hotwords 读取失败: {fp}: {e}")
+            self._context = ""
+        return self._context
+
     def transcribe(self, audio: np.ndarray | Path | str, sample_rate: int = 16000) -> str:
         """### audio 无论是路径还是数组都可返回 *转录*后的,*处理*好的str
         - Qwen3-ASR 引擎固定 16kHz, 非 16k 输入会自动重采样
@@ -221,7 +250,7 @@ class QwenTranscriber(TranscribeBase):
         try:
             result = self._engine.asr(
                 audio=audio,
-                context=self.params.get("context", "") or "",
+                context=self._load_context(),
                 language=self.params.get("language", "Chinese"),
                 chunk_size_sec=self.params.get("chunk_size", 40.0),
                 memory_chunks=self.params.get("memory_num", 1),
