@@ -50,7 +50,10 @@ def _start_daemon() -> bool:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
     )
-    for _ in range(50):
+    # 等待锁文件出现。
+    # 注意: daemon 需完成全部 import 才创建锁。qwen3_asr 模式已懒加载 torch(~1-2s),
+    # 但 paraformer 模式 import torch 可能 3~10s, 慢机器更久, 所以放宽到 20s。
+    for _ in range(200):
         time.sleep(0.1)
         if LOCK.exists():
             break

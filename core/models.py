@@ -5,8 +5,10 @@ import numpy as np
 from config import Config
 from core.transcribe_base import TranscribeBase
 from pathlib import Path
-from funasr import AutoModel
 from core.audio import load_wav
+
+# 注意: funasr/torch 已懒加载(见 ParaformerTranscriber.load),
+# 避免 qwen3_asr 模式启动时被迫 import 重依赖(torch 约 3~10s)
 
 
 logger = logging.getLogger("core/models.py")
@@ -37,6 +39,9 @@ class ParaformerTranscriber(TranscribeBase):
         """已经加载了model就返回None"""
         if self._model is not None:
             return
+
+        # 懒加载: 只有 paraformer 模式才 import torch/funasr(约 3~10s)
+        from funasr import AutoModel
         
         for name, path in [("主模型", self.model_dir), ("VAD", self.vad_dir), ("标点", self.punc_dir)]:
             if not os.path.exists(path):
