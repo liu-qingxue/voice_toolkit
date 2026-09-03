@@ -55,9 +55,10 @@ flowchart LR
 ```
 voice_toolkit/
 ├── run.sh               # 实时模式入口(Linux, 录音/转录切换, 建议绑全局快捷键)
-├── run.ps1              # 实时模式入口(Windows, 同上 + SendInput 光标注入)
-├── windows/             # Windows 侧文档(部署/绑快捷键/排障)
-│   └── README.md
+├── windows/             # Windows 侧: pythonw 无窗口入口 + 文档
+│   ├── run_hotkey.py    #   Windows 快捷键入口(pythonw.exe 运行, 永不弹终端; toggle + SendInput 上屏)
+│   ├── README.md        #   Windows 部署/绑快捷键/排障
+│   └── legacy/          #   早期 PowerShell 方案(废弃, 仅供参考)
 ├── live/                # 实时: toggle.py 触发 → main_daemon.py 托盘守护进程(跨平台)
 │   ├── toggle.py        #   检查/拉起 daemon, 转发"toggle"命令, 输出结果(fcntl/PID 双平台)
 │   ├── main_daemon.py   #   Qt 托盘 + 录音/转录状态机(命令文件驱动)
@@ -200,12 +201,12 @@ venv/bin/python batch/main.py -i <音频目录> -o <输出目录>
 
 | | Linux | Windows |
 |:---|:---|:---|
-| 入口(绑快捷键) | `./run.sh` | `run.ps1` |
-| 光标注入 | fcitx5 插件(`frontend/fcitx5.py`) | `run.ps1` 内 SendInput(不碰剪贴板) |
+| 入口(绑快捷键) | `./run.sh` | `pythonw windows/run_hotkey.py`(GUI 子系统, 无终端) |
+| 光标注入 | fcitx5 插件(`frontend/fcitx5.py`) | `windows/run_hotkey.py` 内 ctypes 直调 SendInput(不碰剪贴板) |
 | 配置目录 | `~/.config/voice_toolkit` | `%APPDATA%\voice_toolkit` |
 | 锁/结果/日志 | `/tmp/transcriber` | `%LOCALAPPDATA%\voice_toolkit` |
 | 配置热加载 | inotify | 每 1s 轮询时间戳 |
 | daemon 单实例 | fcntl 文件锁 | PID 文件 + OpenProcess 探测 |
-| output_mode 推荐 | `cursor` | `notification` 或 `window`(注入交给 run.ps1) |
+| output_mode 推荐 | `cursor` | `notification` 或 `window`(注入交给 run_hotkey.py) |
 
 详细部署(建 venv / 依赖 / DirectML / 绑定快捷键 / 排障)见 **[`windows/README.md`](windows/README.md)**。

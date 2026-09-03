@@ -134,10 +134,10 @@ def _qwen_backend_dir() -> Path:
 
 QWEN_BACKEND = _qwen_backend_dir()
 
-def _ensure_qwen_backend_importable():
+def _ensure_qwen_backend_importable(backend_dir: Path):
     """把 Qwen3-ASR-GGUF 后端仓库加进 sys.path, 使 qwen_asr_gguf 包可导入"""
-    if str(QWEN_BACKEND) not in sys.path:
-        sys.path.insert(0, str(QWEN_BACKEND))
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
 
 
 def _resample_to_16k(audio: np.ndarray, sample_rate: int) -> np.ndarray:
@@ -165,6 +165,10 @@ class QwenTranscriber(TranscribeBase):
         self.model_dir = Path(model_cfg["dir"]).expanduser()
         self.params = model_cfg.get("params") or {}
         self.config_dir = CFG.config_dir   # ~/.config/voice_toolkit/ 下放 hotwords
+        # 后端仓库位置优先级: 配置 backend_dir > 环境变量 QWEN_BACKEND_DIR > 平台默认
+        self.backend_dir = Path(
+            model_cfg.get("backend_dir") or os.environ.get("QWEN_BACKEND_DIR") or _qwen_backend_dir()
+        ).expanduser()
         self._context: str | None = None   # 缓存, None=未加载
         self._engine = None
 
@@ -177,11 +181,11 @@ class QwenTranscriber(TranscribeBase):
         if self._engine is not None:
             return
 
-        _ensure_qwen_backend_importable()
+        _ensure_qwen_backend_importable(self.backend_dir)
         try:
             from qwen_asr_gguf.inference import QwenASREngine, ASREngineConfig
         except ImportError as e:
-            raise RuntimeError(f"Qwen3-ASR-GGUF 后端导入失败(检查 {QWEN_BACKEND}): {e}") from e
+            raise RuntimeError(f"Qwen3-ASR-GGUF 后端导入失败(检查 {self.backend_dir}, 或配置 backend_dir): {e}") from e
 
         config = ASREngineConfig(
             model_dir=str(self.model_dir),

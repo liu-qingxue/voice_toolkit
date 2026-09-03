@@ -1,5 +1,5 @@
 """
-live 切换脚本。
+live 切换逻辑 + CLI 入口。
 向守护进程的命令文件写入 toggle，根据 daemon 的 state 决定本次该"开始录音"还是"等待转录结果"。
 
 跨平台说明:
@@ -7,9 +7,14 @@ live 切换脚本。
 - Windows: daemon 用 PID 文件互斥, 这里读 PID + OpenProcess 探测进程存活
 - state 文件(idle/recording/transcribing)由 daemon 维护, 解决了旧版
   "无条件空等 5s、长录音转录结果丢失"的问题:
-    idle/空         → 本次 toggle = 开始录音, 立即返回
+    idle/空         → 本次 toggle = 开始录音, 立即返回空
     recording       → 本次 toggle = 停止录音并转录, 等待结果出现
-    transcribing    → daemon 会忽略本次 toggle, 立即返回
+    transcribing    → daemon 会忽略本次 toggle, 立即返回空
+
+提供两个使用面:
+- toggle_capture(): 核心逻辑, 返回可上屏文本(无则 "")。供 Windows GUI 入口
+  (windows/run_hotkey.py, pythonw 无窗口运行)调用。
+- 本文件直接运行 = CLI(print 结果), 供 Linux run.sh 使用, 行为与旧版一致。
 """
 import json
 import logging
@@ -34,6 +39,11 @@ STATE = CFG.state_file
 
 # 等待转录结果的最长秒数(录音上限内的音频都该完成, 超时视为异常)
 _WAIT_RESULT_SEC = 120.0
+
+
+class ToggleError(Exception):
+    """toggle 过程出错(daemon 启动失败/结果文件损坏等)"""
+
 
 # ── 平台相关: fcntl(Linux) / PID 文件探测(Windows) ──────────
 try:
@@ -125,15 +135,20 @@ def _start_daemon() -> bool:
 def _read_state() -> str:
     """读 daemon 当前状态: idle / recording / transcribing / 空(无 daemon)"""
     try:
-        return STATE.read_text().strip() or ""
+        return STATE.read_text(encoding="utf-8").strip() or ""
     except OSError:
         return ""
 
 
-def toggle():
+def toggle_capture() -> str:
+    """触发一次 toggle 并返回结果文本。
+    - 开始录音 / 转录中忽略 / 转录空结果 → 返回 ""
+    - daemon 启动失败 / 结果文件损坏 → raise ToggleError
+    - 正常转录完成 → 返回文本(已读走并删除 result 文件)
+    """
     if not _daemon_alive():
         if not _start_daemon():
-            sys.exit(1)
+            raise ToggleError("daemon 启动失败")
         time.sleep(0.5)
 
     state = _read_state()
@@ -151,34 +166,48 @@ def toggle():
             # daemon 状态回到 idle 而 result 未出现 → 本次被丢弃(空音频/录音失败), 立即返回
             if _read_state() not in ("recording", "transcribing"):
                 logger.info("daemon 已回到 idle 且无结果(空音频/失败), 本次无输出")
-                return
+                return ""
             time.sleep(0.1)
         else:
             logger.warning(f"等待转录结果超时({_WAIT_RESULT_SEC}s)")
-            return
+            return ""
 
         if RESULT.exists():
             try:
                 # dispatcher 用 utf-8 写; Windows 下 read_text() 默认按 GBK 解码会崩, 必须显式指定
                 result = json.loads(RESULT.read_text(encoding="utf-8"))
                 text = result["text"]
-            except (json.JSONDecodeError, KeyError):
-                logger.error("结果文件损坏")
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.error(f"结果文件损坏: {e}")
                 RESULT.unlink(missing_ok=True)
-                sys.exit(1)
+                raise ToggleError("结果文件损坏") from e
             logger.info(f"转录结束,结果文本长度: {len(text)}")
-            # Windows 控制台默认编码可能是 GBK, 强制 UTF-8, 便于 run.ps1 捕获
-            try:
-                sys.stdout.reconfigure(encoding="utf-8")
-            except Exception:
-                pass
-            print(text, end="", flush=True)
             RESULT.unlink(missing_ok=True)
-    else:
-        # state 为空/idle → 本次开始录音(daemon 会立即切到 recording), 无需等待;
-        # state=transcribing → daemon 忽略本次 toggle 并提示, 也无需等待。
-        logger.info("本次为开始录音(或转录中忽略), 无需等待结果")
+            return text
+        return ""
+
+    # state 为空/idle → 本次开始录音(daemon 会立即切到 recording), 无需等待;
+    # state=transcribing → daemon 忽略本次 toggle 并提示, 也无需等待。
+    logger.info("本次为开始录音(或转录中忽略), 无需等待结果")
+    return ""
+
+
+def _main():
+    """CLI 入口: 打印结果到 stdout(供 Linux run.sh / 调试用)。
+    pythonw(无控制台)下 stdout 为 None 时静默跳过。"""
+    try:
+        text = toggle_capture()
+    except ToggleError as e:
+        logger.error(f"toggle 失败: {e}")
+        sys.exit(1)
+    if sys.stdout is not None:
+        # Windows 控制台默认编码可能是 GBK, 强制 UTF-8 便于管道/PS 捕获
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+        print(text, end="", flush=True)
 
 
 if __name__ == "__main__":
-    toggle()
+    _main()
