@@ -2,6 +2,8 @@
 - 直接以类属性访问各个配置参数
 - 配置不得修改
 """
+import os
+import sys
 from pathlib import Path
 import yaml
 import copy
@@ -9,9 +11,41 @@ import logging
 
 logger = logging.getLogger("config/config.py")
 
-_xdg_config = Path("~/.config/voice_toolkit").expanduser()
+
+def _is_windows() -> bool:
+    """当前是否 Windows 平台(跨平台分支的统一开关)"""
+    return sys.platform == "win32"
+
+
+def _default_config_dir() -> Path:
+    """用户配置目录: 放 config.yaml / hotwords
+    - Linux:   ~/.config/voice_toolkit      (沿用旧约定)
+    - Windows: %APPDATA%\voice_toolkit      (Roaming, 随账号漫游)
+    """
+    if _is_windows():
+        base = os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming"
+        return Path(base) / "voice_toolkit"
+    return Path("~/.config/voice_toolkit").expanduser()
+
+
+def _default_runtime_dir() -> Path:
+    """运行时文件目录: 锁/结果/cmd/state 文件
+    - Linux:   /tmp/transcriber             (沿用旧约定)
+    - Windows: %LOCALAPPDATA%\voice_toolkit  (Local, 本机即可)
+    注意: 与 default_config 的 lock_file/result_file 默认值联动,
+    用户若在 config.yaml 显式写了这两个字段, 则以其为准。
+    """
+    if _is_windows():
+        base = os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local"
+        return Path(base) / "voice_toolkit"
+    return Path("/tmp/transcriber")
+
+
+_xdg_config = _default_config_dir()
 _yaml_path = _xdg_config / "config.yaml"
 _xdg_config.mkdir(parents=True, exist_ok=True)
+_RUNTIME_DIR = _default_runtime_dir()
+_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 
 class Config:      
     default_config = {
@@ -19,8 +53,8 @@ class Config:
         "channels": 1,
         "dtype": "int16",
         "segment_seconds": 600,
-        "lock_file": "/tmp/transcriber/live_transcriber.lock",
-        "result_file": "/tmp/transcriber/live_transcriber_result.json",
+        "lock_file": str(_RUNTIME_DIR / "live_transcriber.lock"),
+        "result_file": str(_RUNTIME_DIR / "live_transcriber_result.json"),
         "models": {
             "paraformer_v1": {
                 "dir": "~/.cache/modelscope/hub/models/iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/",
@@ -174,12 +208,16 @@ class Config:
         return Path(__file__).resolve().parent.parent
     @property
     def config_dir(self) -> Path:
-        """XDG 配置目录 ~/.config/voice_toolkit/"""
+        """用户配置目录(config.yaml / hotwords 所在): Linux ~/.config/voice_toolkit, Windows %APPDATA%\voice_toolkit"""
         return _xdg_config
     @property
     def cannel_cmd(self):
         """轻量级进程间通信(IPC)通道,传递命令"""
         return Path(str(self.lock_file)+"_cmd")
+    @property
+    def state_file(self) -> Path:
+        """daemon 状态文件(idle/recording/transcribing), 供 toggle/前端判断应否等待结果"""
+        return Path(str(self.lock_file)+"_state")
     # ==== 模型配置 =================
     @property
     def model(self) -> str :

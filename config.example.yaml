@@ -1,19 +1,26 @@
 # ============================================================
 #  ⚠️ 这是【模板文件】, 不生效! 不要直接编辑本文件。
 #
-#  生效的配置在:  ~/.config/voice_toolkit/config.yaml
-#  部署方法:
-#     mkdir -p ~/.config/voice_toolkit
-#     cp config/config.example.yaml ~/.config/voice_toolkit/config.yaml
-#     vim ~/.config/voice_toolkit/config.yaml   # 按需修改
+#  生效的配置在(平台自适应):
+#    Linux:   ~/.config/voice_toolkit/config.yaml
+#    Windows: %APPDATA%\voice_toolkit\config.yaml   (即 C:\Users\<你>\AppData\Roaming\voice_toolkit\config.yaml)
+#  部署方法(Linux):  mkdir -p ~/.config/voice_toolkit && cp 本文件到其上  (详见仓库 README)
+#  部署方法(Windows PowerShell):
+#     mkdir $env:APPDATA\voice_toolkit
+#     copy config\config.example.yaml $env:APPDATA\voice_toolkit\config.yaml
+#     notepad $env:APPDATA\voice_toolkit\config.yaml   # 按需修改
 #
 #  ⚙️ 工作原理:
 #    config/config.py 内置了一份 default_config(代码里的默认值),
-#    启动时读取 ~/.config/voice_toolkit/config.yaml, 与你写的字段做
+#    启动时读取上面路径的 config.yaml, 与你写的字段做
 #    深合并(deep merge)。所以本模板里的字段全部省略也能跑——
 #    会落到代码默认值。但强烈建议按下面的结构写全, 便于维护。
 #
 #  🔄 热加载: live 守护进程监听本文件变化, 保存后自动生效(无需重启)。
+#     Windows 侧无 inotify, daemon 改为每 1s 轮询文件时间戳, 效果相同。
+#
+#  💡 双系统共用模型(推荐): 模型放 NTFS 共享分区, 两边各自写自己平台的路径
+#     Linux:  /mnt/shared/Models/...    Windows: D:\Models\...
 # ============================================================
 
 # ─── 录音参数 ────────────────────────────
@@ -23,8 +30,12 @@ dtype: int16                # 采样位深
 segment_seconds: 600        # 音频分片秒数(超长录音按此切片, 防内存爆)
 
 # --- 运行时文件路径(通常无需改) -----------
-lock_file: /tmp/transcriber/live_transcriber.lock      # 守护进程排他锁
-result_file: /tmp/transcriber/live_transcriber_result.json  # 转录结果(进程间传递)
+# lock_file / result_file 默认随平台自适应, 一般无需填:
+#   Linux:   /tmp/transcriber/live_transcriber.lock (+ _result.json / _cmd / _state)
+#   Windows: %LOCALAPPDATA%\voice_toolkit\live_transcriber.lock (+ _result.json / _cmd / _state)
+# 若要自定义, 取消下面两行注释并写绝对路径(注意两边平台都要写对):
+# lock_file: /tmp/transcriber/live_transcriber.lock      # 守护进程排他锁
+# result_file: /tmp/transcriber/live_transcriber_result.json  # 转录结果(进程间传递)
 
 # ─── 模型 ────────────────────────────────
 models:
@@ -71,10 +82,13 @@ live:
   max_duration: 6000          # 最长录音秒数
   idle_timeout_sec: 3600      # 空闲模型释放秒数(0 = 禁用, 常驻内存)
   output_mode: cursor         # 输出方式见下:
-                              #   cursor       → 在光标处输入(经 fcitx5 插件)
+                              #   cursor       → 在光标处输入(经 fcitx5 插件, Linux 输入法框架)
                               #   fcitx5       → 同上(别名)
-                              #   notification → 系统通知气泡
+                              #   notification → 系统通知气泡(Linux: notify-send; Windows: Qt 托盘气泡)
                               #   window       → 项目自带弹窗(可复制)
+                              # ⚠️ Windows 推荐: notification(气泡预览) 或 window(全文弹窗),
+                              #    光标自动注入交给 run.ps1 的 SendInput(不依赖 output_mode),
+                              #    转录结果始终会写 result 文件供 run.ps1 读取上屏。
   stream: false
   device: auto                # auto/cuda/cpu
 

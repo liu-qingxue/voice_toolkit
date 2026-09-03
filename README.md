@@ -54,9 +54,12 @@ flowchart LR
 
 ```
 voice_toolkit/
-├── run.sh               # 实时模式入口(录音/转录切换, 建议绑全局快捷键)
-├── live/                # 实时: toggle.py 触发 → main_daemon.py 托盘守护进程
-│   ├── toggle.py        #   检查/拉起 daemon, 转发"toggle"命令, 输出结果
+├── run.sh               # 实时模式入口(Linux, 录音/转录切换, 建议绑全局快捷键)
+├── run.ps1              # 实时模式入口(Windows, 同上 + SendInput 光标注入)
+├── windows/             # Windows 侧文档(部署/绑快捷键/排障)
+│   └── README.md
+├── live/                # 实时: toggle.py 触发 → main_daemon.py 托盘守护进程(跨平台)
+│   ├── toggle.py        #   检查/拉起 daemon, 转发"toggle"命令, 输出结果(fcntl/PID 双平台)
 │   ├── main_daemon.py   #   Qt 托盘 + 录音/转录状态机(命令文件驱动)
 │   └── recorder.py      #   录音(16k 单声道 int16)
 ├── batch/main.py        # 批量: 目录内所有音频 → txt
@@ -65,10 +68,11 @@ voice_toolkit/
 │   ├── create_transcriber.py  # 按配置 model 分发
 │   └── transcribe_base.py
 ├── frontend/            # 输出: dispatcher → fcitx5/通知/弹窗
-│   └── fcitx5.py        #   写 /tmp/voxtype, 由 fcitx5 插件提交
-├── fcitx5-commit/       # 可选: fcitx5 插件(光标处输入), C++ 需编译
+│   ├── dispatcher.py    #   结果落盘 + 按平台分发(output_mode)
+│   └── fcitx5.py        #   Linux: 写 /tmp/voxtype, 由 fcitx5 插件提交(Windows 不用)
+├── fcitx5-commit/       # 可选: fcitx5 插件(光标处输入), C++ 需编译(Linux)
 ├── config/
-│   ├── config.py        # 配置类(内置默认值 + 读 ~/.config)
+│   ├── config.py        # 配置类(内置默认值 + 读平台配置目录; 锁/结果路径随平台)
 │   └── config.example.yaml  # ⚠️ 模板文件! 部署参照它, 不生效
 ├── requirements.txt     # Python 依赖(注意 torch 要 CPU 版, 见部署)
 └── DEVELOPMENT_LOG.md   # 开发日志(含全部踩坑记录)
@@ -192,4 +196,16 @@ venv/bin/python batch/main.py -i <音频目录> -o <输出目录>
 
 ## Windows?
 
-本项目的后端(Qwen3-ASR-GGUF)在 Windows 上原生支持(DirectML),模型已放共享分区(NTFS)双系统共用。Windows 侧需要:Python 环境 + 复制本项目 + 重写 `frontend/fcitx5.py` 的输出为 Windows 光标注入(如 SendInput)。详见仓库 docs(规划中)。
+本项目已做**跨平台适配**(同一仓库, `sys.platform` 自动分流), 后端引擎 Qwen3-ASR-GGUF 在 Windows 上原生支持(DirectML)。模型放 NTFS 共享分区即可双系统共用。
+
+| | Linux | Windows |
+|:---|:---|:---|
+| 入口(绑快捷键) | `./run.sh` | `run.ps1` |
+| 光标注入 | fcitx5 插件(`frontend/fcitx5.py`) | `run.ps1` 内 SendInput(不碰剪贴板) |
+| 配置目录 | `~/.config/voice_toolkit` | `%APPDATA%\voice_toolkit` |
+| 锁/结果/日志 | `/tmp/transcriber` | `%LOCALAPPDATA%\voice_toolkit` |
+| 配置热加载 | inotify | 每 1s 轮询时间戳 |
+| daemon 单实例 | fcntl 文件锁 | PID 文件 + OpenProcess 探测 |
+| output_mode 推荐 | `cursor` | `notification` 或 `window`(注入交给 run.ps1) |
+
+详细部署(建 venv / 依赖 / DirectML / 绑定快捷键 / 排障)见 **[`windows/README.md`](windows/README.md)**。

@@ -6,6 +6,7 @@
 import logging
 from config import Config
 from core.models import ParaformerTranscriber, QwenTranscriber
+from core.transcribe_base import MockTranscriber
 
 logger = logging.getLogger("core/create_transcriber.py")
 
@@ -23,7 +24,10 @@ def create_transcriber(mode: str= "live") -> ParaformerTranscriber :
         transcriber = None
 
     if transcriber is None:
-        if model in ("paraformer_v1", "paraformer_v2"):
+        if model == "mock":
+            # 调试前端链路用: 不加载任何模型, 固定返回测试文本
+            transcriber = MockTranscriber()
+        elif model in ("paraformer_v1", "paraformer_v2"):
             transcriber = ParaformerTranscriber(mode)
         elif model == "qwen3_asr":
             transcriber = QwenTranscriber(mode, model_name=model)

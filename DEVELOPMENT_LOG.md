@@ -259,3 +259,37 @@ models:
 | paraformer_v1 (旧) | 7.68% | 0.19 | CPU |
 | paraformer_v2 (旧) | 11.42% | 0.14 | CPU |
 | **Qwen3-ASR 1.7B (新)** | **0.56%** | **0.04** | ~1.6GB |
+
+## Windows 前端与跨平台适配
+
+**需求**: 本项目原本 Linux 专用(fcitx5 光标注入), 需要 Windows 前端。经评估不 fork——
+单仓库加平台分支, Linux 行为零回归(仅"空等 5s"被顺带修掉, 见下)。
+
+**平台耦合清理**(每个点都 sys.platform 分流, Linux 走原逻辑):
+| 位置 | Linux | Windows |
+|:---|:---|:---|
+| daemon/toggle 单实例锁 | fcntl.flock 排他锁 | PID 文件 + OpenProcess 存活探测 |
+| 配置热加载 | inotify(libc.so.6) | QTimer 每 1s 轮询 config.yaml mtime |
+| 配置目录 | ~/.config/voice_toolkit | %APPDATA%\voice_toolkit |
+| 锁/结果/state/cmd 路径 | /tmp/transcriber | %LOCALAPPDATA%\voice_toolkit |
+| 日志路径(log.py) | /tmp/live_transcriber.log | %LOCALAPPDATA%\voice_toolkit\... |
+| dispatcher cursor/fcitx5 | fcitx5.output() 写 /tmp/voxtype | 跳过(上屏由 run.ps1 SendInput) |
+| dispatcher notification | notify-send + wl-copy | Qt 托盘气泡(notify 回调) |
+| Qwen 后端仓库位置 | ~/Public/Qwen3-ASR-GGUF | 环境变量 QWEN_BACKEND_DIR |
+
+**新增 state 文件机制**(顺带修掉旧 bug):
+- 旧 toggle.py 无条件空等 5s——第一次按键(开始录音)也空转 5s; 转录超 5s 结果直接丢。
+- daemon 现在把状态(idle/recording/transcribing)写进 `lock_file_state`; toggle.py 根据状态
+  决定"立即返回"还是"等转录结果(上限 120s)"。Linux 同样受益(只是不再空等)。
+
+**Windows 前端 run.ps1**(对标 run.sh, 绑快捷键):
+- 探测 venv/PATH 里的 Python → 跑 live/toggle.py → 捕获转录文本;
+- SendInput(KEYEVENTF_UNICODE) 逐字符注入当前光标, 绕过输入法, 中文直接上屏,
+  换行转回车键; 不碰剪贴板。
+- 蜂鸣反馈: 短音=收到命令 / 双高音=已上屏 / 三低音=出错; 支持 -Silent/-DryRun/-Python。
+
+**坑**: Windows 上 os.kill(pid, 0) 会真的 TerminateProcess(退出码 0), 不能用于存活探测,
+必须 OpenProcess。run.ps1 需 UTF-8 BOM(否则 PowerShell 5.1 中文注释乱码)。
+
+**待 Windows 侧实测**: venv 依赖、onnxruntime DirectML、QWEN_BACKEND_DIR 指路、模型路径、
+快捷键工具绑定(见 windows/README.md)。

@@ -5,11 +5,14 @@ live 守护进程
 import json
 import os
 import sys
-import fcntl
 import threading
 import logging
 import concurrent.futures
 from pathlib import Path
+try:
+    import fcntl  # Linux: POSIX 文件锁(Windows 无此模块, 见 _try_lock)
+except ImportError:
+    fcntl = None  # Windows: 改用 PID 文件互斥
 from PyQt6.QtCore import Qt, QObject, QTimer, QFileSystemWatcher, QSocketNotifier
 from PyQt6.QtGui import QIcon, QPainter, QPixmap, QAction
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
@@ -28,6 +31,17 @@ from frontend.dispatcher import dispatch
 LOCK = CFG.lock_file
 RESULT = CFG.result_file
 CMD = CFG.cannel_cmd
+STATE = CFG.state_file
+
+
+def _write_state(state: str):
+    """把 daemon 运行状态(idle/recording/transcribing)写入 state 文件。
+    供 toggle.py / run.ps1 判断本次 toggle 应否等待转录结果。纯新增文件,
+    Linux 旧调用链不读它, 无任何副作用。"""
+    try:
+        STATE.write_text(state, encoding="utf-8")
+    except OSError as e:
+        logger.error(f"state 文件写入失败: {e}")
 
 IDLE_TIMEOUT = CFG.idle_timeout_sec
 
@@ -40,8 +54,13 @@ _transcriber = None
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)   # concurrent-并发,executor-执行者
 
 def _try_lock() -> bool:
-    """获取排他锁, 成功返回True,已有实例则返回 False"""
+    """获取单实例锁, 成功返回 True, 已有实例则返回 False
+    - Linux:   fcntl 排他锁(沿用旧机制)
+    - Windows: PID 文件 —— 文件里存 daemon 自己 PID, 进程存活即互斥
+    """
     global _lock_fd
+    if fcntl is None:
+        return _win_try_pid_lock()
     try:
         _lock_fd = os.open(str(LOCK), os.O_CREAT | os.O_RDWR)   # 读写模式+文件不存在时自动创建
         logger.info(f"{LOCK}创建成功,lock_fd为{_lock_fd}")
@@ -71,14 +90,65 @@ def _try_lock() -> bool:
         return False
     return True
 
-def _release_lock():
-    """"""
+
+def _win_pid_alive(pid: int) -> bool:
+    """Windows 进程存活探测。
+    ⚠️ 不能用 os.kill(pid, 0): Windows 上 os.kill 除 CTRL_* 外一律
+    TerminateProcess, 会把 pid 对应的进程真的杀掉。"""
+    import ctypes
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    kernel32 = ctypes.windll.kernel32
+    h = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not h:
+        return False
+    kernel32.CloseHandle(h)
+    return True
+
+
+def _win_try_pid_lock() -> bool:
+    """Windows 单实例: PID 文件。文件里的进程活着 = 已有实例。
+    若文件残留但进程已死(异常退出), 直接清理后接管。"""
     global _lock_fd
-    if _lock_fd is not None:
-        fcntl.flock(_lock_fd, fcntl.LOCK_UN)
-        os.close(_lock_fd)
-        logger.info("已解锁")
+    if LOCK.exists():
+        try:
+            pid = int(LOCK.read_text().strip())
+            if _win_pid_alive(pid):
+                logger.warning(f"已有实例在运行 (pid={pid})")
+                return False
+        except (OSError, ValueError):
+            pass
+        # 残留(进程已死/内容损坏) → 清理接管
+        try:
+            LOCK.unlink(missing_ok=True)
+        except OSError as e:
+            logger.error(f"清理残留锁失败: {e}")
+    try:
+        LOCK.write_text(str(os.getpid()), encoding="ascii")
+    except OSError as e:
+        logger.error(f"PID 锁写入失败: {e}")
+        return False
+    _lock_fd = "pid"   # 占位标记, 仅用于 _release_lock 判断
+    logger.info(f"PID 锁创建成功, pid={os.getpid()}")
+    return True
+
+
+def _release_lock():
+    """释放单实例锁"""
+    global _lock_fd
+    if _lock_fd is None:
+        return
+    if fcntl is None:
+        # Windows: 删 PID 文件
+        try:
+            LOCK.unlink(missing_ok=True)
+        except OSError as e:
+            logger.error(f"PID 锁删除失败: {e}")
         _lock_fd = None
+        return
+    fcntl.flock(_lock_fd, fcntl.LOCK_UN)
+    os.close(_lock_fd)
+    logger.info("已解锁")
+    _lock_fd = None
 
 # ── 托盘图标 ──────────────────────────────
 def _build_icon(color):
@@ -118,23 +188,31 @@ class LiveLoop(QObject):
         self._transcribe_poll.timeout.connect(self._poll_transcribe)
         self._transcribe_poll.start(100)   # 按设定的时间间隔，定期发射 timeout 信号,这里的Qtimer是一个定时器,timeout不是超时!
 
-        # ── 配置热加载（inotify 事件驱动）──
-        import ctypes
-        libc = ctypes.CDLL("libc.so.6", use_errno=True)
-        self._inotify_fd = libc.inotify_init()
-        if self._inotify_fd < 0:
-            logger.error("inotify_init 失败")
+        # ── 配置热加载 ──
+        if sys.platform == "win32":
+            # Windows 无 inotify: 定时器轮询 config.yaml 的 mtime, 有变化才重载(开销可忽略)
+            self._cfg_mtime: float | None = None
+            self._cfg_poll = QTimer(self)
+            self._cfg_poll.timeout.connect(self._on_cfg_poll)
+            self._cfg_poll.start(1000)
         else:
-            wd = libc.inotify_add_watch(
-                self._inotify_fd,
-                str(CFG.config_dir).encode(),
-                0x02 | 0x100)  # IN_CLOSE_WRITE | IN_CREATE
-            if wd < 0:
-                logger.error("inotify_add_watch 失败")
+            # Linux: inotify 事件驱动(沿用旧机制)
+            import ctypes
+            libc = ctypes.CDLL("libc.so.6", use_errno=True)
+            self._inotify_fd = libc.inotify_init()
+            if self._inotify_fd < 0:
+                logger.error("inotify_init 失败")
             else:
-                self._inotify_notifier = QSocketNotifier(
-                    self._inotify_fd, QSocketNotifier.Type.Read)
-                self._inotify_notifier.activated.connect(self._on_inotify_ready)
+                wd = libc.inotify_add_watch(
+                    self._inotify_fd,
+                    str(CFG.config_dir).encode(),
+                    0x02 | 0x100)  # IN_CLOSE_WRITE | IN_CREATE
+                if wd < 0:
+                    logger.error("inotify_add_watch 失败")
+                else:
+                    self._inotify_notifier = QSocketNotifier(
+                        self._inotify_fd, QSocketNotifier.Type.Read)
+                    self._inotify_notifier.activated.connect(self._on_inotify_ready)
 
         # ── 空闲卸载计时器 ──
         self._idle = QTimer(self)   # idle-空闲(ideal-理想/理想的)
@@ -184,6 +262,7 @@ class LiveLoop(QObject):
         self._transcribe_poll.stop()
         CMD.unlink(missing_ok=True)
         RESULT.unlink(missing_ok=True)
+        STATE.unlink(missing_ok=True)
         _release_lock()
         QApplication.quit()
 
@@ -214,15 +293,16 @@ class LiveLoop(QObject):
             self._tray.showMessage("提示", "正在转录中，请稍候", QSystemTrayIcon.MessageIcon.Information, 5000)
             return
         if self._recorder is None:
-            # 开始录音
+            # 开始录音(mock 调试模式不依赖麦克风)
             self._idle.stop()
-            self._recorder = LiveRecorder()
+            self._recorder = LiveRecorder(mock=(CFG.model == "mock"))
             # daemon--当前进程结束的时候，这个进程将作为连带进程跟着被结束。
             self._rec_thread = threading.Thread(target=self._recorder.run, daemon=True)
             self._rec_thread.start()
 
             # 录音已开始,更新ui
             self._tray_update(2)
+            _write_state("recording")
             logger.info("录音开始")
         else:
             logger.info("录音停止，开始转录")
@@ -234,6 +314,7 @@ class LiveLoop(QObject):
             # 直接返回空,更新托盘为空闲状态,并跳过转录
             if audio is None or len(audio) == 0:
                 self._tray_update(1)
+                _write_state("idle")
                 return
 
             # 开始转录
@@ -244,12 +325,24 @@ class LiveLoop(QObject):
             self._transcribe_future = _executor.submit(_transcriber.transcribe, audio)
 
             self._tray_update(3) # 更新托盘为转录状态
+            _write_state("transcribing")
 
     # ===== 配置热加载 ============
     def _on_inotify_ready(self, fd):
         os.read(fd, 4096)
         if CFG.reload():
             logger.info(f"配置热加载: output_mode={CFG.output_mode}")
+
+    def _on_cfg_poll(self):
+        """Windows: 定时检查 config.yaml 是否变化(保存后自动生效)"""
+        try:
+            m = (CFG.config_dir / "config.yaml").stat().st_mtime
+        except OSError:
+            return
+        if self._cfg_mtime is None or m != self._cfg_mtime:
+            self._cfg_mtime = m
+            if CFG.reload():
+                logger.info(f"配置热加载: output_mode={CFG.output_mode}")
 
     # ===== 转录轮询 ========
     def _poll_transcribe(self):
@@ -279,6 +372,7 @@ class LiveLoop(QObject):
             logger.error(f"dispatch 异常: {e}", exc_info=True)
         
         self._tray_update(1)
+        _write_state("idle")
 
     # ===== 前端 ============
     def _show_notification(self, preview: str):
@@ -313,6 +407,7 @@ def main():
     if not _try_lock():
         logger.warning("已有实例在运行")
         sys.exit(1)
+    _write_state("idle")
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)   # 当最后一个窗口关闭时，别退出。

@@ -11,13 +11,16 @@ logger = logging.getLogger("live/recorder.py")
 class LiveRecorder:
     """录音器。run() 在子线程运行，stop() 在主线程调用取回音频。"""
 
-    def __init__(self, max_duration: int | None = None):
+    def __init__(self, max_duration: int | None = None, mock: bool = False):
+        """mock=True: 调试前端链路用 —— 不碰麦克风, run() 只计时,
+        stop() 返回一段静音数组, 让转录/结果回传全流程可跑。"""
         if max_duration is None:
             max_duration = CFG.max_duration or 60   # # 最长录音秒数
         self.sample_rate = CFG.sample_rate
         self.dtype = CFG.dtype
         self.channels = CFG.channels
         self.max_duration = max_duration
+        self._mock = mock
 
         self._running = False
         self._buffer: queue.Queue[np.ndarray] = queue.Queue()
@@ -31,23 +34,24 @@ class LiveRecorder:
         self._buffer = queue.Queue()   # 重置了队列,防止队列残留
         self._start_time = time_module.time()   # 记录开始时间
 
-        def callback(indata, frames, time_info, status):   # 位置约定!!!第一个参数被 sounddevice.InputStream的数组传入
-            if self._running:
-                self._buffer.put_nowait(indata.copy())   # 注意要用copy
+        if not self._mock:
+            def callback(indata, frames, time_info, status):   # 位置约定!!!第一个参数被 sounddevice.InputStream的数组传入
+                if self._running:
+                    self._buffer.put_nowait(indata.copy())   # 注意要用copy
 
-        try:
-            self._stream = sd.InputStream(
-                samplerate=self.sample_rate,
-                channels=self.channels,
-                dtype=self.dtype,
-                callback=callback,
-            )
-            self._stream.start()   # 开始录音
-            logger.info("录音开始!")
-        except Exception as e:
-            logger.error(f"麦克风启动失败: {e}")
-            self._running = False
-            return
+            try:
+                self._stream = sd.InputStream(
+                    samplerate=self.sample_rate,
+                    channels=self.channels,
+                    dtype=self.dtype,
+                    callback=callback,
+                )
+                self._stream.start()   # 开始录音
+                logger.info("录音开始!")
+            except Exception as e:
+                logger.error(f"麦克风启动失败: {e}")
+                self._running = False
+                return
 
         while self._running:
             elapsed = time_module.time() - self._start_time
@@ -64,6 +68,11 @@ class LiveRecorder:
             self._stream.stop()
             self._stream.close()
             self._stream = None
+
+        if self._mock:
+            # 调试模式: 返回 2 秒静音模拟一次有效录音(mock 转录器不关心内容)
+            logger.info("mock 录音结束, 返回 2s 静音")
+            return np.zeros(int(self.sample_rate * 2), dtype=np.float32)
 
         chunks = []
         while True:

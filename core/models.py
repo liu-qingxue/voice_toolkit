@@ -120,8 +120,19 @@ class ParaformerTranscriber(TranscribeBase):
         return str(result).strip()
 
 
-# Qwen3-ASR-GGUF 后端仓库的绝对路径(保持 ~/Public 独立, git 可更新)
-QWEN_BACKEND = Path.home() / "Public" / "Qwen3-ASR-GGUF"
+# Qwen3-ASR-GGUF 后端仓库目录
+# 优先级: 环境变量 QWEN_BACKEND_DIR > 平台默认
+#   Linux:   ~/Public/Qwen3-ASR-GGUF      (沿用历史约定, 保持独立可 git pull)
+#   Windows: 默认 ~/Qwen3-ASR-GGUF; 强烈建议显式设 QWEN_BACKEND_DIR(如 D:\Models\Qwen3-ASR-GGUF)
+def _qwen_backend_dir() -> Path:
+    env = os.environ.get("QWEN_BACKEND_DIR")
+    if env:
+        return Path(env).expanduser()
+    if sys.platform == "win32":
+        return Path.home() / "Qwen3-ASR-GGUF"
+    return Path.home() / "Public" / "Qwen3-ASR-GGUF"
+
+QWEN_BACKEND = _qwen_backend_dir()
 
 def _ensure_qwen_backend_importable():
     """把 Qwen3-ASR-GGUF 后端仓库加进 sys.path, 使 qwen_asr_gguf 包可导入"""

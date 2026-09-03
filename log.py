@@ -1,10 +1,17 @@
 # log.py
 import logging
+import os
 import sys
 from pathlib import Path
 
-# 硬编码日志文件路径（按需修改）
-LOG_FILE = Path("/tmp/live_transcriber.log")
+def _default_log_file() -> Path:
+    """日志文件路径(按需修改): Linux /tmp; Windows %LOCALAPPDATA%\voice_toolkit"""
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local"
+        return Path(base) / "voice_toolkit" / "live_transcriber.log"
+    return Path("/tmp/live_transcriber.log")
+
+LOG_FILE = _default_log_file()
 LOG_FILE.parent.mkdir(parents= True, exist_ok= True)
 # LOG_FILE.unlink(missing_ok=True)
 logging.basicConfig(
