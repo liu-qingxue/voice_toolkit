@@ -1,0 +1,89 @@
+# ============================================================
+#  ⚠️ 这是【模板文件】, 不生效! 不要直接编辑本文件。
+#
+#  生效的配置在:  ~/.config/voice_toolkit/config.yaml
+#  部署方法:
+#     mkdir -p ~/.config/voice_toolkit
+#     cp config/config.example.yaml ~/.config/voice_toolkit/config.yaml
+#     vim ~/.config/voice_toolkit/config.yaml   # 按需修改
+#
+#  ⚙️ 工作原理:
+#    config/config.py 内置了一份 default_config(代码里的默认值),
+#    启动时读取 ~/.config/voice_toolkit/config.yaml, 与你写的字段做
+#    深合并(deep merge)。所以本模板里的字段全部省略也能跑——
+#    会落到代码默认值。但强烈建议按下面的结构写全, 便于维护。
+#
+#  🔄 热加载: live 守护进程监听本文件变化, 保存后自动生效(无需重启)。
+# ============================================================
+
+# ─── 录音参数 ────────────────────────────
+sample_rate: 16000          # 录音采样率(hz)。ASR 模型普遍要求 16k
+channels: 1                 # 声道数(单声道)
+dtype: int16                # 采样位深
+segment_seconds: 600        # 音频分片秒数(超长录音按此切片, 防内存爆)
+
+# --- 运行时文件路径(通常无需改) -----------
+lock_file: /tmp/transcriber/live_transcriber.lock      # 守护进程排他锁
+result_file: /tmp/transcriber/live_transcriber_result.json  # 转录结果(进程间传递)
+
+# ─── 模型 ────────────────────────────────
+models:
+  # ▼ paraformer_v1: SeACo-Paraformer(实时优化版)
+  #   特点: 低延迟适合实时; 精度一般。由 funasr 驱动(需要 torch)。
+  paraformer_v1:
+    dir: /mnt/shared/Models/iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/
+    vad_dir: /mnt/shared/Models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch/
+    punc_dir: /mnt/shared/Models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch/
+    params:
+      ncpu: 2               # funasr 推理线程数
+
+  # ▼ paraformer_v2: Paraformer-large(离线高精度版)
+  paraformer_v2:
+    dir: /mnt/shared/Models/iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch/
+    vad_dir: /mnt/shared/Models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch/
+    punc_dir: /mnt/shared/Models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch/
+    params:
+      ncpu: 2
+
+  # ▼ qwen3_asr: Qwen3-ASR-1.7B GGUF 混合格式(推荐主力!)
+  #   架构: ONNX Encoder(CPU) + llama.cpp GGUF Decoder(Vulkan GPU)
+  #   精度: 纯净 CER 0.56%(paraformer 7.68%), RTF 0.04(远超实时)
+  #   注意: 模型文件路径指向共享分区, 具体位置按你的机器调整
+  qwen3_asr:
+    dir: /mnt/shared/Models/qwen3-asr-gguf/     # 含 3 个文件(见 README)
+    params:
+      onnx_provider: CPU      # ONNX Encoder 后端。AMD=CPU, NVIDIA 可试 CUDA
+      llm_use_gpu: true       # GGUF Decoder 走 GPU(llama.cpp Vulkan)
+      enable_aligner: false   # 时间戳对齐(做 SRT 字幕才需要, 需额外模型)
+      n_ctx: 2048             # LLM 上下文长度(每秒音频约 20 token)
+      chunk_size: 40.0        # 音频分块秒数(长音频按块推理)
+      memory_num: 1           # 跨块记忆的块数(长音频连贯性)
+      language: Chinese       # 识别语言(也可留空让模型自动判断)
+      context: ""             # 热词文件名: 填 xxx.txt → 读取
+                              #   ~/.config/voice_toolkit/hotwords/xxx.txt
+                              #   内容作为上下文提示, 提升专业术语准确率
+                              #   填 0 或留空 = 关闭(不触发文件 IO)
+      verbose: false          # 引擎详细日志(排障时开 true)
+
+# ─── 工作模式: 指定 live/batch 各用哪个模型 ──
+live:
+  model: qwen3_asr            # ← 实时转录用(推荐 qwen3_asr)
+  max_duration: 6000          # 最长录音秒数
+  idle_timeout_sec: 3600      # 空闲模型释放秒数(0 = 禁用, 常驻内存)
+  output_mode: cursor         # 输出方式见下:
+                              #   cursor       → 在光标处输入(经 fcitx5 插件)
+                              #   fcitx5       → 同上(别名)
+                              #   notification → 系统通知气泡
+                              #   window       → 项目自带弹窗(可复制)
+  stream: false
+  device: auto                # auto/cuda/cpu
+
+batch:
+  model: qwen3_asr            # ← 批量转录用
+  stream: false
+  device: auto
+
+# ─── 前端参数 ─────────────────────────────
+window:
+  popup_copy_delay: 200       # 弹窗: 复制后停留毫秒, 然后开始淡出
+  popup_fade_ms: 300          # 弹窗: 淡出动画持续毫秒
