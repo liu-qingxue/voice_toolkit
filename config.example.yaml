@@ -101,3 +101,12 @@ batch:
 window:
   popup_copy_delay: 200       # 弹窗: 复制后停留毫秒, 然后开始淡出
   popup_fade_ms: 300          # 弹窗: 淡出动画持续毫秒
+
+# ─── 声音提示(Windows 快捷键反馈音) ─────────
+# 开关: 三个子开关须在总开关 enabled=true 时才生效。
+# 嫌吵直接 enabled: false 一键全静音(不用动下面子开关)。
+sounds:
+  enabled: true     # 总开关: false = 全部静音
+  start: false      # 按键收到"嗒"声(默认关: 本机播放时序体验差)
+  done: true        # 上屏成功双高音(默认开: 音色温和, 已认可)
+  fail: false       # 出错三低音(默认关)

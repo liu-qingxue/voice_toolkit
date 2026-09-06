@@ -14,11 +14,12 @@ voice_toolkit Windows 快捷键入口 —— 无窗口版
   - 按下瞬间应立即反馈(不等待任何后端逻辑)
   - 转录文本上屏后再播成功音
 
-⚠️ 声音默认【禁用】(_SOUND_ENABLED=False)。留档供后续研究:
-  - play_verify.py 实测(本机 2026-09): Beep/sounddevice 时响时不响,
-    PlaySound 完全不响且抛 AttributeError: 本机 Python312 的 winsound.pyd
-    缺失 SND_SYNC(非标准版, 疑似发行版裁剪); 仅 PowerShell SoundPlayer 稳定。
-  - 启用: 置 _SOUND_ENABLED=True, 播放走预生成 wav + SoundPlayer。
+⚠️ 声音开关已从【代码常量】移到【生效配置 config.yaml 的 sounds: 段】:
+  - 嫌吵: 配置里 enabled: false 即可一键全静音, 不用改代码。
+  - 播放通道背景(play_verify.py 实测 2026-09): Beep/sounddevice 时响时不响,
+    PlaySound 不响且抛 AttributeError(本机 Python312 的 winsound.pyd 缺失
+    SND_SYNC, 疑似发行版裁剪); 仅 PowerShell SoundPlayer 稳定。
+  - 播放实现: 预生成 wav + PowerShell SoundPlayer。
 参数:
   --dry-run   只跑 toggle 不注入、不响(调试链路用)
 """
@@ -39,12 +40,35 @@ if str(ROOT) not in sys.path:
 from live.toggle import ToggleError, toggle_capture
 
 # ── 声音反馈: 预生成 wav + PowerShell SoundPlayer ──────────
-# 分开关控制(调用点全部保留):
-#   DONE(上屏成功双高音) 默认启用 —— 用户认可其音色, 保留;
-#   START(按键嗒声)/ FAIL(出错) 暂关 —— 本机播放时序体验差, 想用改 True。
-_SOUND_START_ENABLED = False
-_SOUND_DONE_ENABLED = True
-_SOUND_FAIL_ENABLED = False
+# 开关从生效配置读取: %APPDATA%\voice_toolkit\config.yaml 的 sounds: 段。
+# 总开关 enabled=false 时全部静音(耳机/嫌吵一键关); 三个子开关只在该
+#   enabled=true 时生效(start 按键嗒/done 上屏成功/fail 出错)。
+# 配置缺失/解析失败 → 用下列代码默认(永不因配置问题崩)。
+_SOUND_DEFAULT = {
+    "enabled": True,   # 总开关
+    "start": False,    # 按键"嗒"(本机播放时序体验差, 默认关)
+    "done": True,      # 上屏成功双高音(音色温和, 默认开)
+    "fail": False,     # 出错三低音(默认关)
+}
+_SOUND_CFG = dict(_SOUND_DEFAULT)
+
+
+def _load_sound_cfg():
+    """从生效配置读 sounds: 段并合并(仅接受 bool, 其余保持默认); 容错静默。"""
+    try:
+        import yaml
+        cfg_dir = os.environ.get("APPDATA") or os.path.expanduser("~")
+        p = os.path.join(cfg_dir, "voice_toolkit", "config.yaml")
+        with open(p, encoding="utf-8") as f:
+            s = (yaml.safe_load(f) or {}).get("sounds") or {}
+        for k in _SOUND_DEFAULT:
+            if k in s and isinstance(s[k], bool):
+                _SOUND_CFG[k] = s[k]
+    except Exception:
+        pass  # 配置读不到就用代码默认, 不阻塞快捷键功能
+
+
+_load_sound_cfg()
 
 # 音色: (freq Hz, 时长 ms); freq<=0 = 静音间隔
 _SOUNDS = {
@@ -104,8 +128,10 @@ _ensure_sound_files()
 
 def _play_sound(name: str):
     """PowerShell SoundPlayer 无窗口播放固定 wav(实测唯一稳定通道)。
-    对应开关关闭时直接返回。"""
+    总开关关闭或对应子开关关闭时直接返回。"""
     try:
+        if not _SOUND_CFG["enabled"] or not _SOUND_CFG[name]:
+            return
         if os.environ.get("VOX_NO_BEEP") == "1":
             return
         import subprocess
@@ -121,23 +147,17 @@ def _play_sound(name: str):
 
 
 def _beep_received():
-    """按键收到(按下瞬间反馈, 与录音逻辑无关) — 暂关"""
-    if not _SOUND_START_ENABLED:
-        return
+    """按键收到(按下瞬间反馈, 与录音逻辑无关)"""
     _play_sound("start")
 
 
 def _beep_success():
-    """推理完成/文本已注入光标 — 保留启用"""
-    if not _SOUND_DONE_ENABLED:
-        return
+    """推理完成/文本已注入光标"""
     _play_sound("done")
 
 
 def _beep_failed():
-    """出错 — 暂关"""
-    if not _SOUND_FAIL_ENABLED:
-        return
+    """出错"""
     _play_sound("fail")
 
 
